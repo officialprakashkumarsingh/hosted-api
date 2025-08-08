@@ -12,10 +12,14 @@ app = FastAPI(title="OpenAI-Compatible Proxy (Vercel minimal)")
 REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "30"))
 
 # Supported models (Vercel minimal API)
-VERCEL_MODELS: List[str] = ["gpt-4o", "gpt-4o-mini"]
+VERCEL_MODELS: List[str] = ["gpt-4o", "gpt-4o-mini", "perplexed"]
 VERCEL_MINIMAL_API_URL = os.getenv("VERCEL_MINIMAL_API_URL", "https://minimal-chatbot.vercel.app/api/chat")
 VERCEL_SESSION_PREFIX = os.getenv("VERCEL_SESSION_PREFIX", "")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o")
+
+# PERPLEXED backend configuration
+PERPLEXED_MODEL_ID = os.getenv("PERPLEXED_MODEL_ID", "perplexed")
+PERPLEXED_API_ENDPOINT = os.getenv("PERPLEXED_API_ENDPOINT", "https://d21l5c617zttgr.cloudfront.net/stream_search")
 
 
 def _now_unix() -> int:
@@ -62,6 +66,29 @@ def _new_vercel_session(session_id: str) -> requests.Session:
     return s
 
 
+def _new_perplexed_session() -> requests.Session:
+    s = requests.Session()
+    s.headers.update({
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "accept-language": "en-US,en;q=0.9,en-IN;q=0.8",
+        "content-type": "application/json",
+        "dnt": "1",
+        "origin": "https://d37ozmhmvu2kcg.cloudfront.net",
+        "referer": "https://d37ozmhmvu2kcg.cloudfront.net/",
+        "sec-ch-ua": '"Not)A;Brand";v="8", "Chromium";v="138", "Microsoft Edge";v="138"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "cross-site",
+        "sec-gpc": "1",
+        # Reasonable desktop UA
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    })
+    return s
+
+
 @app.get("/")
 def root() -> PlainTextResponse:
     return PlainTextResponse("ok")
@@ -92,6 +119,113 @@ async def chat_completions(request: Request):
     else:
         user_text = body.get("prompt") or ""
         image_url = None
+
+    # Route by model
+    if model == PERPLEXED_MODEL_ID:
+        session = _new_perplexed_session()
+        payload = {"user_prompt": user_text}
+
+        def perplexed_sse_generator() -> Generator[bytes, None, None]:
+            chat_id = _generate_id("chatcmpl")
+            created = _now_unix()
+            # Initial role chunk
+            initial_chunk = {
+                "id": chat_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [
+                    {"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}
+                ],
+            }
+            yield f"data: {json.dumps(initial_chunk)}\n\n".encode("utf-8")
+
+            buffer = ""
+            try:
+                with session.post(PERPLEXED_API_ENDPOINT, json=payload, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
+                    resp.raise_for_status()
+                    for chunk in resp.iter_content(chunk_size=512, decode_unicode=True):
+                        if not chunk:
+                            continue
+                        buffer += chunk
+                        # Split using PERPLEXED delimiter
+                        sep = "[/PERPLEXED-SEPARATOR]"
+                        while sep in buffer:
+                            part, buffer = buffer.split(sep, 1)
+                            part = part.strip()
+                            if not part:
+                                continue
+                            # Each part should be JSON
+                            try:
+                                data = json.loads(part)
+                            except json.JSONDecodeError:
+                                continue
+
+                            # Final answer detection
+                            if isinstance(data, dict) and data.get("success") and data.get("answer"):
+                                answer = str(data.get("answer") or "")
+                                if answer:
+                                    chunk_payload = {
+                                        "id": chat_id,
+                                        "object": "chat.completion.chunk",
+                                        "created": created,
+                                        "model": model,
+                                        "choices": [
+                                            {"index": 0, "delta": {"content": answer}, "finish_reason": None}
+                                        ],
+                                    }
+                                    yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
+                            # Ignore stage updates etc.
+            except requests.exceptions.RequestException as e:
+                error_chunk = {
+                    "id": _generate_id("err"),
+                    "object": "error",
+                    "created": _now_unix(),
+                    "message": str(e),
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n".encode("utf-8")
+            finally:
+                yield b"data: [DONE]\n\n"
+
+        if stream:
+            return StreamingResponse(perplexed_sse_generator(), media_type="text/event-stream")
+
+        # Non-streaming: accumulate
+        full_text = ""
+        buffer = ""
+        try:
+            with session.post(PERPLEXED_API_ENDPOINT, json=payload, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
+                resp.raise_for_status()
+                for chunk in resp.iter_content(chunk_size=512, decode_unicode=True):
+                    if not chunk:
+                        continue
+                    buffer += chunk
+                    sep = "[/PERPLEXED-SEPARATOR]"
+                    while sep in buffer:
+                        part, buffer = buffer.split(sep, 1)
+                        part = part.strip()
+                        if not part:
+                            continue
+                        try:
+                            data = json.loads(part)
+                        except json.JSONDecodeError:
+                            continue
+                        if isinstance(data, dict) and data.get("success") and data.get("answer"):
+                            full_text += str(data.get("answer") or "")
+        except requests.exceptions.RequestException as e:
+            return JSONResponse(status_code=502, content={"error": {"message": str(e), "type": "bad_gateway"}})
+
+        response = {
+            "id": _generate_id("chatcmpl"),
+            "object": "chat.completion",
+            "created": _now_unix(),
+            "model": model,
+            "choices": [
+                {"index": 0, "message": {"role": "assistant", "content": full_text}, "finish_reason": "stop"}
+            ],
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        }
+        return JSONResponse(content=response)
 
     # Build message payload matching minimal-chatbot expectations
     if image_url:

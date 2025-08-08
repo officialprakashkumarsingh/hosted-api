@@ -7,6 +7,7 @@ This service exposes an OpenAI-compatible API (`/v1/chat/completions`) and proxi
 Supported models:
 - gpt-4o
 - gpt-4o-mini
+- perplexed
 
 ## Run locally
 
@@ -25,6 +26,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 3000
   - `VERCEL_MINIMAL_API_URL` (default: `https://minimal-chatbot.vercel.app/api/chat`)
   - `VERCEL_SESSION_PREFIX` (default: empty)
   - `DEFAULT_MODEL` (default: `gpt-4o`)
+  - `PERPLEXED_API_ENDPOINT` (default: `https://d21l5c617zttgr.cloudfront.net/stream_search`)
+  - `PERPLEXED_MODEL_ID` (default: `perplexed`)
 
 ## Models
 
@@ -33,7 +36,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 3000
   "object": "list",
   "data": [
     {"id": "gpt-4o"},
-    {"id": "gpt-4o-mini"}
+    {"id": "gpt-4o-mini"},
+    {"id": "perplexed"}
   ]
 }
 ```
@@ -75,6 +79,17 @@ curl -N https://<host>/v1/chat/completions \
         {"type": "image_url", "image_url": {"url": "https://picsum.photos/400"}}
       ]
     }]
+  }'
+```
+
+- PERPLEXED (streaming):
+```bash
+curl -N https://<host>/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "perplexed",
+    "stream": true,
+    "messages": [{"role": "user", "content": "What is Python?"}]
   }'
 ```
 
