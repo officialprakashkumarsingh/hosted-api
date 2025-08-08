@@ -12,7 +12,22 @@ app = FastAPI(title="OpenAI-Compatible Proxy (Vercel minimal)")
 REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "30"))
 
 # Supported models (Vercel minimal API)
-VERCEL_MODELS: List[str] = ["gpt-4o", "gpt-4o-mini", "perplexed", "felo"]
+FLOWITH_MODELS: List[str] = [
+    "gpt-4.1-nano",
+    "gpt-4.1-mini",
+    "deepseek-chat",
+    "deepseek-reasoner",
+    "claude-3.5-haiku",
+    "gemini-2.0-flash",
+    "gemini-2.5-flash",
+    "grok-3-mini",
+]
+VERCEL_MODELS: List[str] = [
+    "gpt-4o",
+    "gpt-4o-mini",
+    "perplexed",
+    "felo",
+] + FLOWITH_MODELS
 VERCEL_MINIMAL_API_URL = os.getenv("VERCEL_MINIMAL_API_URL", "https://minimal-chatbot.vercel.app/api/chat")
 VERCEL_SESSION_PREFIX = os.getenv("VERCEL_SESSION_PREFIX", "")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o")
@@ -24,6 +39,10 @@ PERPLEXED_API_ENDPOINT = os.getenv("PERPLEXED_API_ENDPOINT", "https://d21l5c617z
 # FELO backend configuration
 FELO_MODEL_ID = os.getenv("FELO_MODEL_ID", "felo")
 FELO_API_ENDPOINT = os.getenv("FELO_API_ENDPOINT", "https://api.felo.ai/search/threads")
+
+# FLOWITH backend configuration
+FLOWITH_API_ENDPOINT = os.getenv("FLOWITH_API_ENDPOINT", "https://edge.flowith.net/ai/chat?mode=general")
+FLOWITH_SYSTEM_PROMPT = os.getenv("FLOWITH_SYSTEM_PROMPT", "You are a helpful assistant.")
 
 
 def _now_unix() -> int:
@@ -114,6 +133,22 @@ def _new_felo_session() -> requests.Session:
     return s
 
 
+def _new_flowith_session() -> requests.Session:
+    s = requests.Session()
+    s.headers.update({
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "accept-language": "en-US,en;q=0.9,en-IN;q=0.8",
+        "content-type": "application/json",
+        "origin": "https://flowith.io",
+        "referer": "https://edge.flowith.net/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+        "dnt": "1",
+        "sec-gpc": "1",
+    })
+    return s
+
+
 @app.get("/")
 def root() -> PlainTextResponse:
     return PlainTextResponse("ok")
@@ -153,7 +188,6 @@ async def chat_completions(request: Request):
         def perplexed_sse_generator() -> Generator[bytes, None, None]:
             chat_id = _generate_id("chatcmpl")
             created = _now_unix()
-            # Initial role chunk
             initial_chunk = {
                 "id": chat_id,
                 "object": "chat.completion.chunk",
@@ -166,40 +200,41 @@ async def chat_completions(request: Request):
             yield f"data: {json.dumps(initial_chunk)}\n\n".encode("utf-8")
 
             buffer = ""
+            accumulated_text = ""
             try:
                 with session.post(PERPLEXED_API_ENDPOINT, json=payload, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
                     resp.raise_for_status()
-                    for chunk in resp.iter_content(chunk_size=512, decode_unicode=True):
+                    for chunk in resp.iter_content(chunk_size=1024, decode_unicode=True):
                         if not chunk:
                             continue
                         buffer += chunk
-                        # Split using PERPLEXED delimiter
                         sep = "[/PERPLEXED-SEPARATOR]"
                         while sep in buffer:
                             part, buffer = buffer.split(sep, 1)
                             part = part.strip()
                             if not part:
                                 continue
-                            # Each part should be JSON
                             try:
                                 data = json.loads(part)
                             except json.JSONDecodeError:
                                 continue
-
-                            # Final answer detection
+                            # When final answer is present, compute delta
                             if isinstance(data, dict) and data.get("success") and data.get("answer"):
-                                answer = str(data.get("answer") or "")
-                                if answer:
-                                    chunk_payload = {
-                                        "id": chat_id,
-                                        "object": "chat.completion.chunk",
-                                        "created": created,
-                                        "model": model,
-                                        "choices": [
-                                            {"index": 0, "delta": {"content": answer}, "finish_reason": None}
-                                        ],
-                                    }
-                                    yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
+                                new_text = str(data.get("answer") or "")
+                                if len(new_text) > len(accumulated_text):
+                                    delta = new_text[len(accumulated_text):]
+                                    accumulated_text = new_text
+                                    if delta:
+                                        chunk_payload = {
+                                            "id": chat_id,
+                                            "object": "chat.completion.chunk",
+                                            "created": created,
+                                            "model": model,
+                                            "choices": [
+                                                {"index": 0, "delta": {"content": delta}, "finish_reason": None}
+                                            ],
+                                        }
+                                        yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
                             # Ignore stage updates etc.
             except requests.exceptions.RequestException as e:
                 error_chunk = {
@@ -215,13 +250,14 @@ async def chat_completions(request: Request):
         if stream:
             return StreamingResponse(perplexed_sse_generator(), media_type="text/event-stream")
 
-        # Non-streaming: accumulate
+        # Non-streaming: accumulate deltas
         full_text = ""
         buffer = ""
+        accumulated_text = ""
         try:
             with session.post(PERPLEXED_API_ENDPOINT, json=payload, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
                 resp.raise_for_status()
-                for chunk in resp.iter_content(chunk_size=512, decode_unicode=True):
+                for chunk in resp.iter_content(chunk_size=1024, decode_unicode=True):
                     if not chunk:
                         continue
                     buffer += chunk
@@ -236,7 +272,11 @@ async def chat_completions(request: Request):
                         except json.JSONDecodeError:
                             continue
                         if isinstance(data, dict) and data.get("success") and data.get("answer"):
-                            full_text += str(data.get("answer") or "")
+                            new_text = str(data.get("answer") or "")
+                            if len(new_text) > len(accumulated_text):
+                                delta = new_text[len(accumulated_text):]
+                                accumulated_text = new_text
+                                full_text += delta
         except requests.exceptions.RequestException as e:
             return JSONResponse(status_code=502, content={"error": {"message": str(e), "type": "bad_gateway"}})
 
@@ -273,7 +313,6 @@ async def chat_completions(request: Request):
         def felo_sse_generator() -> Generator[bytes, None, None]:
             chat_id = _generate_id("chatcmpl")
             created = _now_unix()
-            # Initial role chunk
             initial_chunk = {
                 "id": chat_id,
                 "object": "chat.completion.chunk",
@@ -335,7 +374,7 @@ async def chat_completions(request: Request):
         if stream:
             return StreamingResponse(felo_sse_generator(), media_type="text/event-stream")
 
-        # Non-streaming: accumulate
+        # Non-streaming: accumulate deltas
         full_text = ""
         accumulated_text = ""
         try:
@@ -378,6 +417,130 @@ async def chat_completions(request: Request):
         }
         return JSONResponse(content=response)
 
+    if model in FLOWITH_MODELS:
+        session = _new_flowith_session()
+        node_id = str(uuid.uuid4())
+        payload = {
+            "model": model,
+            "messages": [
+                {"content": FLOWITH_SYSTEM_PROMPT, "role": "system"},
+                {"content": user_text, "role": "user"},
+            ],
+            "stream": True if stream else False,
+            "nodeId": node_id,
+        }
+
+        def flowith_sse_generator() -> Generator[bytes, None, None]:
+            chat_id = _generate_id("chatcmpl")
+            created = _now_unix()
+            initial_chunk = {
+                "id": chat_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [
+                    {"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}
+                ],
+            }
+            yield f"data: {json.dumps(initial_chunk)}\n\n".encode("utf-8")
+
+            try:
+                with session.post(FLOWITH_API_ENDPOINT, json=payload, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
+                    resp.raise_for_status()
+                    encoding = (resp.headers.get("Content-Encoding") or "").lower()
+                    if encoding == "zstd":
+                        try:
+                            import zstandard as zstd  # lazy import
+                            dctx = zstd.ZstdDecompressor()
+                            with dctx.stream_reader(resp.raw) as reader:
+                                while True:
+                                    chunk = reader.read(4096)
+                                    if not chunk:
+                                        break
+                                    text = chunk.decode("utf-8", errors="replace")
+                                    if not text:
+                                        continue
+                                    chunk_payload = {
+                                        "id": chat_id,
+                                        "object": "chat.completion.chunk",
+                                        "created": created,
+                                        "model": model,
+                                        "choices": [
+                                            {"index": 0, "delta": {"content": text}, "finish_reason": None}
+                                        ],
+                                    }
+                                    yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
+                        except Exception as e:
+                            error_chunk = {
+                                "id": _generate_id("err"),
+                                "object": "error",
+                                "created": _now_unix(),
+                                "message": str(e),
+                            }
+                            yield f"data: {json.dumps(error_chunk)}\n\n".encode("utf-8")
+                    else:
+                        for chunk in resp.iter_content(chunk_size=4096):
+                            if not chunk:
+                                break
+                            text = chunk.decode("utf-8", errors="replace")
+                            if not text:
+                                continue
+                            chunk_payload = {
+                                "id": chat_id,
+                                "object": "chat.completion.chunk",
+                                "created": created,
+                                "model": model,
+                                "choices": [
+                                    {"index": 0, "delta": {"content": text}, "finish_reason": None}
+                                ],
+                            }
+                            yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
+            except requests.exceptions.RequestException as e:
+                error_chunk = {
+                    "id": _generate_id("err"),
+                    "object": "error",
+                    "created": _now_unix(),
+                    "message": str(e),
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n".encode("utf-8")
+            finally:
+                yield b"data: [DONE]\n\n"
+
+        if stream:
+            return StreamingResponse(flowith_sse_generator(), media_type="text/event-stream")
+
+        # Non-streaming
+        full_text = ""
+        try:
+            with session.post(FLOWITH_API_ENDPOINT, json=payload, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
+                resp.raise_for_status()
+                encoding = (resp.headers.get("Content-Encoding") or "").lower()
+                if encoding == "zstd":
+                    try:
+                        import zstandard as zstd
+                        dctx = zstd.ZstdDecompressor()
+                        with dctx.stream_reader(resp.raw) as reader:
+                            decompressed = reader.read()
+                            full_text = decompressed.decode("utf-8", errors="replace")
+                    except Exception as e:
+                        return JSONResponse(status_code=502, content={"error": {"message": str(e), "type": "bad_gateway"}})
+                else:
+                    full_text = resp.text
+        except requests.exceptions.RequestException as e:
+            return JSONResponse(status_code=502, content={"error": {"message": str(e), "type": "bad_gateway"}})
+
+        response = {
+            "id": _generate_id("chatcmpl"),
+            "object": "chat.completion",
+            "created": _now_unix(),
+            "model": model,
+            "choices": [
+                {"index": 0, "message": {"role": "assistant", "content": full_text}, "finish_reason": "stop"}
+            ],
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        }
+        return JSONResponse(content=response)
+
     # Build message payload matching minimal-chatbot expectations
     if image_url:
         message_obj: Dict[str, Any] = {
@@ -404,7 +567,6 @@ async def chat_completions(request: Request):
     def vercel_sse_generator() -> Generator[bytes, None, None]:
         chat_id = _generate_id("chatcmpl")
         created = _now_unix()
-        # Initial role chunk
         initial_chunk = {
             "id": chat_id,
             "object": "chat.completion.chunk",
