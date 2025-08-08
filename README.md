@@ -1,3 +1,5 @@
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/officialprakashkumarsingh/hosted-api)
+
 # GPT-OSS OpenAI-Compatible Proxy
 
 This service exposes an OpenAI-compatible API (`/v1/chat/completions`) and proxies requests to the GPT-OSS streaming endpoint.
