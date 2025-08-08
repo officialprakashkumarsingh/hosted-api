@@ -10,6 +10,9 @@ This service exposes an OpenAI-compatible API (`/v1/chat/completions`) and proxi
 
 ```bash
 pip install -r requirements.txt
+# Optional: enable webscout headers for GPT-OSS
+# pip install webscout
+# export USE_LITAGENT_FOR_GPT_OSS=true
 uvicorn app.main:app --host 0.0.0.0 --port 3000
 ```
 
@@ -25,6 +28,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 3000
   - `REASONING_EFFORT_DEFAULT` (default: `high`)
   - `VERCEL_MINIMAL_API_URL` (default: `https://minimal-chatbot.vercel.app/api/chat`)
   - `VERCEL_SESSION_PREFIX` (default: empty)
+  - `USE_LITAGENT_FOR_GPT_OSS` (default: `false`) → if `true` and `webscout` installed, uses browser-like fingerprint and sanitize_stream
 
 ## Models
 

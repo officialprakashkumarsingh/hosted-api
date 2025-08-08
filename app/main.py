@@ -13,6 +13,15 @@ BASE_URL = os.getenv("BASE_URL", "https://api.gpt-oss.com")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-oss-120b")
 REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "30"))
 REASONING_EFFORT_DEFAULT = os.getenv("REASONING_EFFORT_DEFAULT", "high")
+USE_LITAGENT_FOR_GPT_OSS = os.getenv("USE_LITAGENT_FOR_GPT_OSS", "false").lower() == "true"
+
+# Attempt optional imports for fingerprinting and stream sanitization
+try:
+    from webscout.litagent import LitAgent  # type: ignore
+    from webscout.AIutel import sanitize_stream  # type: ignore
+    HAS_WEBSCOUT = True
+except Exception:
+    HAS_WEBSCOUT = False
 
 # Upstreams
 GPT_OSS_MODELS: List[str] = ["gpt-oss-20b", "gpt-oss-120b"]
@@ -84,19 +93,38 @@ def _build_gpt_oss_payload_threads_create(input_text: str) -> Dict[str, Any]:
     }
 
 
-def _new_gpt_oss_session(selected_model: str, reasoning_effort: str) -> requests.Session:
-    s = requests.Session()
-    s.headers.update({
+def _gpt_oss_headers(selected_model: str, reasoning_effort: str) -> Dict[str, str]:
+    if HAS_WEBSCOUT and USE_LITAGENT_FOR_GPT_OSS:
+        headers: Dict[str, str] = LitAgent().generate_fingerprint()  # type: ignore
+        headers.update({
+            "accept": "text/event-stream",
+            "x-reasoning-effort": reasoning_effort,
+            "x-selected-model": selected_model,
+            "x-show-reasoning": "true",
+            "content-type": "application/json",
+        })
+        return headers
+    # Fallback enhanced fingerprint-like headers
+    return {
         "Content-Type": "application/json",
         "Accept": "text/event-stream",
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Origin": "https://gpt-oss.com",
         "Referer": "https://gpt-oss.com/",
         "x-reasoning-effort": reasoning_effort,
         "x-selected-model": selected_model,
         "x-show-reasoning": "true",
-    })
-    return s
+        # Extra browser hints
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Ch-Ua": '"Chromium";v="120", "Not=A?Brand";v="24", "Google Chrome";v="120"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Linux"',
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Connection": "keep-alive",
+    }
 
 
 def _new_vercel_session(session_id: str) -> requests.Session:
@@ -259,7 +287,7 @@ async def chat_completions(request: Request, authorization: Optional[str] = Head
         input_text = body.get("prompt") or ""
 
     payload = _build_gpt_oss_payload_threads_create(input_text=input_text)
-    session = _new_gpt_oss_session(selected_model=selected_model, reasoning_effort=reasoning_effort)
+    gpt_oss_headers = _gpt_oss_headers(selected_model=selected_model, reasoning_effort=reasoning_effort)
 
     def gpt_oss_sse_generator() -> Generator[bytes, None, None]:
         chat_id = _generate_id("chatcmpl")
@@ -276,47 +304,73 @@ async def chat_completions(request: Request, authorization: Optional[str] = Head
         yield f"data: {json.dumps(initial_chunk)}\n\n".encode("utf-8")
 
         try:
-            with session.post(f"{BASE_URL}/chatkit", json=payload, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
+            with requests.post(f"{BASE_URL}/chatkit", json=payload, headers=gpt_oss_headers, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
                 resp.raise_for_status()
-                for raw_line in resp.iter_lines(decode_unicode=True):
-                    if not raw_line or not raw_line.startswith("data: "):
-                        continue
-                    data_str = raw_line[6:].strip()
-                    if not data_str:
-                        continue
-                    try:
-                        event = json.loads(data_str)
-                    except json.JSONDecodeError:
-                        continue
-
-                    if event.get("type") == "thread.item_updated":
-                        update = event.get("update", {})
-                        if update.get("type") == "assistant_message.content_part.text_delta":
-                            delta_text = update.get("delta", "")
-                            chunk = {
-                                "id": chat_id,
-                                "object": "chat.completion.chunk",
-                                "created": created,
-                                "model": selected_model,
-                                "choices": [
-                                    {"index": 0, "delta": {"content": delta_text}, "finish_reason": None}
-                                ],
-                            }
-                            yield f"data: {json.dumps(chunk)}\n\n".encode("utf-8")
-                    elif event.get("type") == "thread.item_done":
-                        item = event.get("item", {})
-                        if item.get("type") == "assistant_message":
-                            final_chunk = {
-                                "id": chat_id,
-                                "object": "chat.completion.chunk",
-                                "created": created,
-                                "model": selected_model,
-                                "choices": [
-                                    {"index": 0, "delta": {}, "finish_reason": "stop"}
-                                ],
-                            }
-                            yield f"data: {json.dumps(final_chunk)}\n\n".encode("utf-8")
-                            break
+                if HAS_WEBSCOUT and USE_LITAGENT_FOR_GPT_OSS:
+                    # Use sanitize_stream to extract deltas
+                    for chunk_text in sanitize_stream(
+                        resp.iter_lines(),
+                        intro_value="data: ",
+                        to_json=True,
+                        skip_markers=["[DONE]"],
+                        strip_chars=None,
+                        content_extractor=lambda d: d.get('update', {}).get('delta') if d.get('type') == 'thread.item_updated' and d.get('update', {}).get('type') == 'assistant_message.content_part.text_delta' else None,
+                        yield_raw_on_error=False,
+                        encoding="utf-8",
+                        raw=False,
+                    ):
+                        if not chunk_text:
+                            continue
+                        chunk = {
+                            "id": chat_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": selected_model,
+                            "choices": [
+                                {"index": 0, "delta": {"content": chunk_text}, "finish_reason": None}
+                            ],
+                        }
+                        yield f"data: {json.dumps(chunk)}\n\n".encode("utf-8")
+                else:
+                    # Fallback manual parsing
+                    for raw_line in resp.iter_lines(decode_unicode=True):
+                        if not raw_line or not raw_line.startswith("data: "):
+                            continue
+                        data_str = raw_line[6:].strip()
+                        if not data_str:
+                            continue
+                        try:
+                            event = json.loads(data_str)
+                        except json.JSONDecodeError:
+                            continue
+                        if event.get("type") == "thread.item_updated":
+                            update = event.get("update", {})
+                            if update.get("type") == "assistant_message.content_part.text_delta":
+                                delta_text = update.get("delta", "")
+                                chunk = {
+                                    "id": chat_id,
+                                    "object": "chat.completion.chunk",
+                                    "created": created,
+                                    "model": selected_model,
+                                    "choices": [
+                                        {"index": 0, "delta": {"content": delta_text}, "finish_reason": None}
+                                    ],
+                                }
+                                yield f"data: {json.dumps(chunk)}\n\n".encode("utf-8")
+                        elif event.get("type") == "thread.item_done":
+                            item = event.get("item", {})
+                            if item.get("type") == "assistant_message":
+                                final_chunk = {
+                                    "id": chat_id,
+                                    "object": "chat.completion.chunk",
+                                    "created": created,
+                                    "model": selected_model,
+                                    "choices": [
+                                        {"index": 0, "delta": {}, "finish_reason": "stop"}
+                                    ],
+                                }
+                                yield f"data: {json.dumps(final_chunk)}\n\n".encode("utf-8")
+                                break
         except requests.exceptions.RequestException as e:
             error_chunk = {
                 "id": _generate_id("err"),
@@ -334,27 +388,42 @@ async def chat_completions(request: Request, authorization: Optional[str] = Head
     # Non-streaming GPT-OSS
     assistant_text_parts: List[str] = []
     try:
-        with session.post(f"{BASE_URL}/chatkit", json=payload, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
+        with requests.post(f"{BASE_URL}/chatkit", json=payload, headers=gpt_oss_headers, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
             resp.raise_for_status()
-            for raw_line in resp.iter_lines(decode_unicode=True):
-                if not raw_line or not raw_line.startswith("data: "):
-                    continue
-                data_str = raw_line[6:].strip()
-                if not data_str:
-                    continue
-                try:
-                    event = json.loads(data_str)
-                except json.JSONDecodeError:
-                    continue
+            if HAS_WEBSCOUT and USE_LITAGENT_FOR_GPT_OSS:
+                for chunk_text in sanitize_stream(
+                    resp.iter_lines(),
+                    intro_value="data: ",
+                    to_json=True,
+                    skip_markers=["[DONE]"],
+                    strip_chars=None,
+                    content_extractor=lambda d: d.get('update', {}).get('delta') if d.get('type') == 'thread.item_updated' and d.get('update', {}).get('type') == 'assistant_message.content_part.text_delta' else None,
+                    yield_raw_on_error=False,
+                    encoding="utf-8",
+                    raw=False,
+                ):
+                    if chunk_text:
+                        assistant_text_parts.append(chunk_text)
+            else:
+                for raw_line in resp.iter_lines(decode_unicode=True):
+                    if not raw_line or not raw_line.startswith("data: "):
+                        continue
+                    data_str = raw_line[6:].strip()
+                    if not data_str:
+                        continue
+                    try:
+                        event = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
 
-                if event.get("type") == "thread.item_updated":
-                    update = event.get("update", {})
-                    if update.get("type") == "assistant_message.content_part.text_delta":
-                        assistant_text_parts.append(update.get("delta", ""))
-                elif event.get("type") == "thread.item_done":
-                    item = event.get("item", {})
-                    if item.get("type") == "assistant_message":
-                        break
+                    if event.get("type") == "thread.item_updated":
+                        update = event.get("update", {})
+                        if update.get("type") == "assistant_message.content_part.text_delta":
+                            assistant_text_parts.append(update.get("delta", ""))
+                    elif event.get("type") == "thread.item_done":
+                        item = event.get("item", {})
+                        if item.get("type") == "assistant_message":
+                            break
     except requests.exceptions.RequestException as e:
         return JSONResponse(status_code=502, content={"error": {"message": str(e), "type": "bad_gateway"}})
 
