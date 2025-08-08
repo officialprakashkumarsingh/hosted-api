@@ -8,6 +8,7 @@ Supported models:
 - gpt-4o
 - gpt-4o-mini
 - perplexed
+- felo
 
 ## Run locally
 
@@ -28,6 +29,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 3000
   - `DEFAULT_MODEL` (default: `gpt-4o`)
   - `PERPLEXED_API_ENDPOINT` (default: `https://d21l5c617zttgr.cloudfront.net/stream_search`)
   - `PERPLEXED_MODEL_ID` (default: `perplexed`)
+  - `FELO_API_ENDPOINT` (default: `https://api.felo.ai/search/threads`)
+  - `FELO_MODEL_ID` (default: `felo`)
 
 ## Models
 
@@ -37,7 +40,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 3000
   "data": [
     {"id": "gpt-4o"},
     {"id": "gpt-4o-mini"},
-    {"id": "perplexed"}
+    {"id": "perplexed"},
+    {"id": "felo"}
   ]
 }
 ```
@@ -90,6 +94,17 @@ curl -N https://<host>/v1/chat/completions \
     "model": "perplexed",
     "stream": true,
     "messages": [{"role": "user", "content": "What is Python?"}]
+  }'
+```
+
+- FELO (streaming):
+```bash
+curl -N https://<host>/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "felo",
+    "stream": true,
+    "messages": [{"role": "user", "content": "Tell me about AI"}]
   }'
 ```
 

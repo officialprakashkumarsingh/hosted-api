@@ -12,7 +12,7 @@ app = FastAPI(title="OpenAI-Compatible Proxy (Vercel minimal)")
 REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "30"))
 
 # Supported models (Vercel minimal API)
-VERCEL_MODELS: List[str] = ["gpt-4o", "gpt-4o-mini", "perplexed"]
+VERCEL_MODELS: List[str] = ["gpt-4o", "gpt-4o-mini", "perplexed", "felo"]
 VERCEL_MINIMAL_API_URL = os.getenv("VERCEL_MINIMAL_API_URL", "https://minimal-chatbot.vercel.app/api/chat")
 VERCEL_SESSION_PREFIX = os.getenv("VERCEL_SESSION_PREFIX", "")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o")
@@ -20,6 +20,10 @@ DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o")
 # PERPLEXED backend configuration
 PERPLEXED_MODEL_ID = os.getenv("PERPLEXED_MODEL_ID", "perplexed")
 PERPLEXED_API_ENDPOINT = os.getenv("PERPLEXED_API_ENDPOINT", "https://d21l5c617zttgr.cloudfront.net/stream_search")
+
+# FELO backend configuration
+FELO_MODEL_ID = os.getenv("FELO_MODEL_ID", "felo")
+FELO_API_ENDPOINT = os.getenv("FELO_API_ENDPOINT", "https://api.felo.ai/search/threads")
 
 
 def _now_unix() -> int:
@@ -85,6 +89,27 @@ def _new_perplexed_session() -> requests.Session:
         "sec-gpc": "1",
         # Reasonable desktop UA
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    })
+    return s
+
+
+def _new_felo_session() -> requests.Session:
+    s = requests.Session()
+    s.headers.update({
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "accept-language": "en-US,en;q=0.9,en-IN;q=0.8",
+        "content-type": "application/json",
+        "dnt": "1",
+        "origin": "https://felo.ai",
+        "referer": "https://felo.ai/",
+        "sec-ch-ua": '"Not)A;Brand";v="99", "Microsoft Edge";v="127", "Chromium";v="127"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-site",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
     })
     return s
 
@@ -212,6 +237,132 @@ async def chat_completions(request: Request):
                             continue
                         if isinstance(data, dict) and data.get("success") and data.get("answer"):
                             full_text += str(data.get("answer") or "")
+        except requests.exceptions.RequestException as e:
+            return JSONResponse(status_code=502, content={"error": {"message": str(e), "type": "bad_gateway"}})
+
+        response = {
+            "id": _generate_id("chatcmpl"),
+            "object": "chat.completion",
+            "created": _now_unix(),
+            "model": model,
+            "choices": [
+                {"index": 0, "message": {"role": "assistant", "content": full_text}, "finish_reason": "stop"}
+            ],
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        }
+        return JSONResponse(content=response)
+
+    if model == FELO_MODEL_ID:
+        session = _new_felo_session()
+        payload = {
+            "query": user_text,
+            "search_uuid": uuid.uuid4().hex,
+            "lang": "",
+            "agent_lang": "en",
+            "search_options": {
+                "langcode": "en-US",
+                "search_image": True,
+                "search_video": True,
+            },
+            "search_video": True,
+            "model": "",
+            "contexts_from": "google",
+            "auto_routing": True,
+        }
+
+        def felo_sse_generator() -> Generator[bytes, None, None]:
+            chat_id = _generate_id("chatcmpl")
+            created = _now_unix()
+            # Initial role chunk
+            initial_chunk = {
+                "id": chat_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [
+                    {"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}
+                ],
+            }
+            yield f"data: {json.dumps(initial_chunk)}\n\n".encode("utf-8")
+
+            accumulated_text = ""
+            try:
+                with session.post(FELO_API_ENDPOINT, json=payload, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
+                    resp.raise_for_status()
+                    for raw_line in resp.iter_lines(decode_unicode=True):
+                        if not raw_line:
+                            continue
+                        line = raw_line.strip()
+                        if not line.startswith("data:"):
+                            continue
+                        data_str = line[5:].strip()
+                        if not data_str:
+                            continue
+                        try:
+                            data = json.loads(data_str)
+                        except json.JSONDecodeError:
+                            continue
+                        if isinstance(data, dict) and data.get("type") == "answer":
+                            inner = data.get("data") or {}
+                            new_text = inner.get("text")
+                            if not isinstance(new_text, str):
+                                continue
+                            if len(new_text) > len(accumulated_text):
+                                delta = new_text[len(accumulated_text):]
+                                accumulated_text = new_text
+                                if delta:
+                                    chunk_payload = {
+                                        "id": chat_id,
+                                        "object": "chat.completion.chunk",
+                                        "created": created,
+                                        "model": model,
+                                        "choices": [
+                                            {"index": 0, "delta": {"content": delta}, "finish_reason": None}
+                                        ],
+                                    }
+                                    yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
+            except requests.exceptions.RequestException as e:
+                error_chunk = {
+                    "id": _generate_id("err"),
+                    "object": "error",
+                    "created": _now_unix(),
+                    "message": str(e),
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n".encode("utf-8")
+            finally:
+                yield b"data: [DONE]\n\n"
+
+        if stream:
+            return StreamingResponse(felo_sse_generator(), media_type="text/event-stream")
+
+        # Non-streaming: accumulate
+        full_text = ""
+        accumulated_text = ""
+        try:
+            with session.post(FELO_API_ENDPOINT, json=payload, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
+                resp.raise_for_status()
+                for raw_line in resp.iter_lines(decode_unicode=True):
+                    if not raw_line:
+                        continue
+                    line = raw_line.strip()
+                    if not line.startswith("data:"):
+                        continue
+                    data_str = line[5:].strip()
+                    if not data_str:
+                        continue
+                    try:
+                        data = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(data, dict) and data.get("type") == "answer":
+                        inner = data.get("data") or {}
+                        new_text = inner.get("text")
+                        if not isinstance(new_text, str):
+                            continue
+                        if len(new_text) > len(accumulated_text):
+                            delta = new_text[len(accumulated_text):]
+                            accumulated_text = new_text
+                            full_text += delta
         except requests.exceptions.RequestException as e:
             return JSONResponse(status_code=502, content={"error": {"message": str(e), "type": "bad_gateway"}})
 
