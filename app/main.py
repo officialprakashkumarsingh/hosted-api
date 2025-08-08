@@ -231,16 +231,20 @@ async def chat_completions(request: Request):
                                     delta = new_text[len(accumulated_text):]
                                     accumulated_text = new_text
                                     if delta:
-                                        chunk_payload = {
-                                            "id": chat_id,
-                                            "object": "chat.completion.chunk",
-                                            "created": created,
-                                            "model": model,
-                                            "choices": [
-                                                {"index": 0, "delta": {"content": delta}, "finish_reason": None}
-                                            ],
-                                        }
-                                        yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
+                                        # Split delta into smaller pieces for real-time feel
+                                        step = 32
+                                        for i in range(0, len(delta), step):
+                                            piece = delta[i:i+step]
+                                            chunk_payload = {
+                                                "id": chat_id,
+                                                "object": "chat.completion.chunk",
+                                                "created": created,
+                                                "model": model,
+                                                "choices": [
+                                                    {"index": 0, "delta": {"content": piece}, "finish_reason": None}
+                                                ],
+                                            }
+                                            yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
             except requests.exceptions.RequestException as e:
                 error_chunk = {
                     "id": _generate_id("err"),
@@ -355,16 +359,19 @@ async def chat_completions(request: Request):
                                 delta = new_text[len(accumulated_text):]
                                 accumulated_text = new_text
                                 if delta:
-                                    chunk_payload = {
-                                        "id": chat_id,
-                                        "object": "chat.completion.chunk",
-                                        "created": created,
-                                        "model": model,
-                                        "choices": [
-                                            {"index": 0, "delta": {"content": delta}, "finish_reason": None}
-                                        ],
-                                    }
-                                    yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
+                                    step = 32
+                                    for i in range(0, len(delta), step):
+                                        piece = delta[i:i+step]
+                                        chunk_payload = {
+                                            "id": chat_id,
+                                            "object": "chat.completion.chunk",
+                                            "created": created,
+                                            "model": model,
+                                            "choices": [
+                                                {"index": 0, "delta": {"content": piece}, "finish_reason": None}
+                                            ],
+                                        }
+                                        yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
             except requests.exceptions.RequestException as e:
                 error_chunk = {
                     "id": _generate_id("err"),
