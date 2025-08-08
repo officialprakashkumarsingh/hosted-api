@@ -1,18 +1,17 @@
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/officialprakashkumarsingh/hosted-api)
 
-# GPT-OSS OpenAI-Compatible Proxy
+# OpenAI-Compatible Proxy (Vercel minimal)
 
-This service exposes an OpenAI-compatible API (`/v1/chat/completions`) and proxies requests to multiple upstreams:
-- gpt-oss-20b, gpt-oss-120b → GPT-OSS chatkit
-- gpt-4o, gpt-4o-mini → Vercel minimal API (`https://minimal-chatbot.vercel.app/api/chat`)
+This service exposes an OpenAI-compatible API (`/v1/chat/completions`) and proxies requests to the Vercel minimal API.
+
+Supported models:
+- gpt-4o
+- gpt-4o-mini
 
 ## Run locally
 
 ```bash
 pip install -r requirements.txt
-# Optional: enable webscout headers for GPT-OSS
-# pip install webscout
-# export USE_LITAGENT_FOR_GPT_OSS=true
 uvicorn app.main:app --host 0.0.0.0 --port 3000
 ```
 
@@ -22,13 +21,10 @@ uvicorn app.main:app --host 0.0.0.0 --port 3000
   - Build Command: `pip install -r requirements.txt`
   - Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 - Optional env vars:
-  - `BASE_URL` (default: `https://api.gpt-oss.com`)
-  - `DEFAULT_MODEL` (default: `gpt-oss-120b`)
   - `REQUEST_TIMEOUT_SECONDS` (default: `30`)
-  - `REASONING_EFFORT_DEFAULT` (default: `high`)
   - `VERCEL_MINIMAL_API_URL` (default: `https://minimal-chatbot.vercel.app/api/chat`)
   - `VERCEL_SESSION_PREFIX` (default: empty)
-  - `USE_LITAGENT_FOR_GPT_OSS` (default: `false`) → if `true` and `webscout` installed, uses browser-like fingerprint and sanitize_stream
+  - `DEFAULT_MODEL` (default: `gpt-4o`)
 
 ## Models
 
@@ -36,8 +32,6 @@ uvicorn app.main:app --host 0.0.0.0 --port 3000
 {
   "object": "list",
   "data": [
-    {"id": "gpt-oss-20b"},
-    {"id": "gpt-oss-120b"},
     {"id": "gpt-4o"},
     {"id": "gpt-4o-mini"}
   ]
@@ -67,7 +61,7 @@ curl -N https://<host>/v1/chat/completions \
   }'
 ```
 
-- Image input (for gpt-4o / gpt-4o-mini):
+- Image input:
 ```bash
 curl -N https://<host>/v1/chat/completions \
   -H 'Content-Type: application/json' \
@@ -84,4 +78,4 @@ curl -N https://<host>/v1/chat/completions \
   }'
 ```
 
-SDKs: set baseURL to your service and use the desired `model` above. No API key is required for these upstreams by default.
+SDKs: set baseURL to your service and use the desired `model` above. No API key is required.
