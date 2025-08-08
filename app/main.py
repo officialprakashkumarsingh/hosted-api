@@ -12,6 +12,8 @@ app = FastAPI(title="GPT-OSS OpenAI-Compatible Proxy")
 BASE_URL = os.getenv("BASE_URL", "https://api.gpt-oss.com")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-oss-120b")
 REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "30"))
+REASONING_EFFORT_DEFAULT = os.getenv("REASONING_EFFORT_DEFAULT", "high")
+AVAILABLE_MODELS: List[str] = ["gpt-oss-20b", "gpt-oss-120b"]
 
 
 def _now_unix() -> int:
@@ -41,22 +43,39 @@ def _extract_text_from_messages(messages: List[Dict[str, Any]]) -> str:
     return "\n".join(parts).strip()
 
 
-def _build_gpt_oss_payload(thread_id: str, input_text: str) -> Dict[str, Any]:
+def _get_last_user_message(messages: List[Dict[str, Any]]) -> str:
+    # Return content of the last user message, or fallback to flattened text
+    for message in reversed(messages):
+        if message.get("role") == "user":
+            content = message.get("content", "")
+            if isinstance(content, list):
+                text_parts: List[str] = []
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "text":
+                        text_parts.append(str(item.get("text", "")))
+                return "\n".join(text_parts)
+            if isinstance(content, str):
+                return content
+            return str(content)
+    # Fallback to flattened text if no explicit user role found
+    return _extract_text_from_messages(messages)
+
+
+def _build_gpt_oss_payload_threads_create(input_text: str) -> Dict[str, Any]:
     return {
-        "op": "threads.addMessage",
+        "op": "threads.create",
         "params": {
             "input": {
                 "text": input_text,
                 "content": [{"type": "input_text", "text": input_text}],
                 "quoted_text": "",
                 "attachments": []
-            },
-            "threadId": thread_id
+            }
         }
     }
 
 
-def _new_session() -> requests.Session:
+def _new_session(selected_model: str, reasoning_effort: str) -> requests.Session:
     s = requests.Session()
     s.headers.update({
         "Content-Type": "application/json",
@@ -64,8 +83,8 @@ def _new_session() -> requests.Session:
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
         "Origin": "https://gpt-oss.com",
         "Referer": "https://gpt-oss.com/",
-        "x-reasoning-effort": "high",
-        "x-selected-model": DEFAULT_MODEL,
+        "x-reasoning-effort": reasoning_effort,
+        "x-selected-model": selected_model,
         "x-show-reasoning": "true",
     })
     return s
@@ -89,28 +108,29 @@ def list_models() -> Dict[str, Any]:
 
 
 @app.post("/v1/chat/completions")
-async def chat_completions(request: Request, authorization: Optional[str] = Header(default=None), x_thread_id: Optional[str] = Header(default=None)):
+async def chat_completions(request: Request, authorization: Optional[str] = Header(default=None), x_thread_id: Optional[str] = Header(default=None), x_reasoning_effort: Optional[str] = Header(default=None)):
     body = await request.json()
 
     # Extract parameters
-    model = body.get("model") or DEFAULT_MODEL
+    requested_model = body.get("model") or DEFAULT_MODEL
+    model = requested_model if requested_model in AVAILABLE_MODELS else AVAILABLE_MODELS[0]
     stream = bool(body.get("stream", False))
     messages: List[Dict[str, Any]] = body.get("messages", [])
 
-    # Optional support for passing thread id through header or extra_body
-    thread_id = x_thread_id or body.get("extra_body", {}).get("thread_id") or f"thr_{uuid.uuid4().hex[:8]}"
+    # Reasoning effort via header or body or env default
+    reasoning_effort = (x_reasoning_effort or body.get("reasoning_effort") or REASONING_EFFORT_DEFAULT)
 
-    # Convert messages to input text (flattened conversation)
-    input_text = _extract_text_from_messages(messages) if messages else (body.get("prompt") or "")
+    # Convert messages: per provided snippet behavior, use last user message for upstream
+    if messages:
+        input_text = _get_last_user_message(messages)
+    else:
+        input_text = body.get("prompt") or ""
 
-    # Build outbound request
-    payload = _build_gpt_oss_payload(thread_id=thread_id, input_text=input_text)
+    # Build outbound request for threads.create (creates a new thread and streams)
+    payload = _build_gpt_oss_payload_threads_create(input_text=input_text)
 
     # Create a new session per request to isolate headers
-    session = _new_session()
-    # Ensure model header matches requested model if provided
-    if model:
-        session.headers["x-selected-model"] = model
+    session = _new_session(selected_model=model, reasoning_effort=reasoning_effort)
 
     def sse_event_generator() -> Generator[bytes, None, None]:
         chat_id = _generate_id("chatcmpl")
