@@ -44,6 +44,13 @@ FELO_API_ENDPOINT = os.getenv("FELO_API_ENDPOINT", "https://api.felo.ai/search/t
 FLOWITH_API_ENDPOINT = os.getenv("FLOWITH_API_ENDPOINT", "https://edge.flowith.net/ai/chat?mode=general")
 FLOWITH_SYSTEM_PROMPT = os.getenv("FLOWITH_SYSTEM_PROMPT", "You are a helpful assistant.")
 
+# SSE headers to improve real-time delivery and disable proxy buffering
+SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "X-Accel-Buffering": "no",
+    "Connection": "keep-alive",
+}
+
 
 def _now_unix() -> int:
     return int(time.time())
@@ -204,7 +211,7 @@ async def chat_completions(request: Request):
             try:
                 with session.post(PERPLEXED_API_ENDPOINT, json=payload, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
                     resp.raise_for_status()
-                    for chunk in resp.iter_content(chunk_size=1024, decode_unicode=True):
+                    for chunk in resp.iter_content(chunk_size=64, decode_unicode=True):
                         if not chunk:
                             continue
                         buffer += chunk
@@ -218,7 +225,6 @@ async def chat_completions(request: Request):
                                 data = json.loads(part)
                             except json.JSONDecodeError:
                                 continue
-                            # When final answer is present, compute delta
                             if isinstance(data, dict) and data.get("success") and data.get("answer"):
                                 new_text = str(data.get("answer") or "")
                                 if len(new_text) > len(accumulated_text):
@@ -235,7 +241,6 @@ async def chat_completions(request: Request):
                                             ],
                                         }
                                         yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
-                            # Ignore stage updates etc.
             except requests.exceptions.RequestException as e:
                 error_chunk = {
                     "id": _generate_id("err"),
@@ -248,7 +253,7 @@ async def chat_completions(request: Request):
                 yield b"data: [DONE]\n\n"
 
         if stream:
-            return StreamingResponse(perplexed_sse_generator(), media_type="text/event-stream")
+            return StreamingResponse(perplexed_sse_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
         # Non-streaming: accumulate deltas
         full_text = ""
@@ -257,7 +262,7 @@ async def chat_completions(request: Request):
         try:
             with session.post(PERPLEXED_API_ENDPOINT, json=payload, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
                 resp.raise_for_status()
-                for chunk in resp.iter_content(chunk_size=1024, decode_unicode=True):
+                for chunk in resp.iter_content(chunk_size=64, decode_unicode=True):
                     if not chunk:
                         continue
                     buffer += chunk
@@ -372,7 +377,7 @@ async def chat_completions(request: Request):
                 yield b"data: [DONE]\n\n"
 
         if stream:
-            return StreamingResponse(felo_sse_generator(), media_type="text/event-stream")
+            return StreamingResponse(felo_sse_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
         # Non-streaming: accumulate deltas
         full_text = ""
@@ -454,7 +459,7 @@ async def chat_completions(request: Request):
                             dctx = zstd.ZstdDecompressor()
                             with dctx.stream_reader(resp.raw) as reader:
                                 while True:
-                                    chunk = reader.read(4096)
+                                    chunk = reader.read(512)
                                     if not chunk:
                                         break
                                     text = chunk.decode("utf-8", errors="replace")
@@ -479,7 +484,7 @@ async def chat_completions(request: Request):
                             }
                             yield f"data: {json.dumps(error_chunk)}\n\n".encode("utf-8")
                     else:
-                        for chunk in resp.iter_content(chunk_size=4096):
+                        for chunk in resp.iter_content(chunk_size=512):
                             if not chunk:
                                 break
                             text = chunk.decode("utf-8", errors="replace")
@@ -507,7 +512,7 @@ async def chat_completions(request: Request):
                 yield b"data: [DONE]\n\n"
 
         if stream:
-            return StreamingResponse(flowith_sse_generator(), media_type="text/event-stream")
+            return StreamingResponse(flowith_sse_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
         # Non-streaming
         full_text = ""
@@ -615,7 +620,7 @@ async def chat_completions(request: Request):
             yield b"data: [DONE]\n\n"
 
     if stream:
-        return StreamingResponse(vercel_sse_generator(), media_type="text/event-stream")
+        return StreamingResponse(vercel_sse_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
     # Non-streaming: accumulate
     full_text = ""
