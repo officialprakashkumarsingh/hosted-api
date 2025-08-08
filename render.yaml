@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: gpt-oss-openai-proxy
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: BASE_URL
+        value: https://api.gpt-oss.com
+      - key: DEFAULT_MODEL
+        value: gpt-oss-120b
+      - key: REQUEST_TIMEOUT_SECONDS
+        value: 30
