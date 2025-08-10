@@ -2,21 +2,15 @@
 
 # OpenAI-Compatible Proxy (Vercel minimal)
 
-This service exposes an OpenAI-compatible API (`/v1/chat/completions`) and proxies requests to the Vercel minimal API.
+This service exposes an OpenAI-compatible API (`/v1/chat/completions`) and proxies requests to multiple AI model providers.
 
 Supported models:
 - gpt-4o
 - gpt-4o-mini
 - perplexed
 - felo
-- gpt-4.1-nano
-- gpt-4.1-mini
-- deepseek-chat
-- deepseek-reasoner
-- claude-3.5-haiku
-- gemini-2.0-flash
-- gemini-2.5-flash
-- grok-3-mini
+- gpt-oss-20b
+- gpt-oss-120b
 
 ## Run locally
 
@@ -39,8 +33,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 3000
   - `PERPLEXED_MODEL_ID` (default: `perplexed`)
   - `FELO_API_ENDPOINT` (default: `https://api.felo.ai/search/threads`)
   - `FELO_MODEL_ID` (default: `felo`)
-  - `FLOWITH_API_ENDPOINT` (default: `https://edge.flowith.net/ai/chat?mode=general`)
-  - `FLOWITH_SYSTEM_PROMPT` (default: `You are a helpful assistant.`)
+  - `GPT_OSS_API_ENDPOINT` (default: `https://api.gpt-oss.com/chatkit`)
 
 ## Models
 
@@ -52,14 +45,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 3000
     {"id": "gpt-4o-mini"},
     {"id": "perplexed"},
     {"id": "felo"},
-    {"id": "gpt-4.1-nano"},
-    {"id": "gpt-4.1-mini"},
-    {"id": "deepseek-chat"},
-    {"id": "deepseek-reasoner"},
-    {"id": "claude-3.5-haiku"},
-    {"id": "gemini-2.0-flash"},
-    {"id": "gemini-2.5-flash"},
-    {"id": "grok-3-mini"}
+    {"id": "gpt-oss-20b"},
+    {"id": "gpt-oss-120b"}
   ]
 }
 ```
@@ -109,19 +96,19 @@ curl -N https://<host>/v1/chat/completions \
   }'
 ```
 
-- FLOWITH models (streaming):
+- GPT-OSS models (streaming):
 ```bash
 curl -N https://<host>/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "gpt-4.1-mini",
+    "model": "gpt-oss-120b",
     "stream": true,
     "messages": [{"role": "user", "content": "Say Hello"}]
   }'
 ```
 
 Notes:
-- FLOWITH may return zstd-compressed streams; the proxy handles this and emits OpenAI-compatible SSE deltas.
 - PERPLEXED and FELO streams are converted into incremental deltas based on their respective stream formats.
+- GPT-OSS models use advanced reasoning with thread-based API and LitAgent fingerprinting.
 
 SDKs: set baseURL to your service and use the desired `model` above. No API key is required.

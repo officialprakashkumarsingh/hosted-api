@@ -6,28 +6,24 @@ import json
 import time
 import uuid
 import os
+from webscout.litagent import LitAgent
+from webscout.AIutel import sanitize_stream
 
 app = FastAPI(title="OpenAI-Compatible Proxy (Vercel minimal)")
 
 REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "30"))
 
-# Supported models (Vercel minimal API)
-FLOWITH_MODELS: List[str] = [
-    "gpt-4.1-nano",
-    "gpt-4.1-mini",
-    "deepseek-chat",
-    "deepseek-reasoner",
-    "claude-3.5-haiku",
-    "gemini-2.0-flash",
-    "gemini-2.5-flash",
-    "grok-3-mini",
+# Supported models
+GPT_OSS_MODELS: List[str] = [
+    "gpt-oss-20b",
+    "gpt-oss-120b",
 ]
 VERCEL_MODELS: List[str] = [
     "gpt-4o",
     "gpt-4o-mini",
     "perplexed",
     "felo",
-] + FLOWITH_MODELS
+] + GPT_OSS_MODELS
 VERCEL_MINIMAL_API_URL = os.getenv("VERCEL_MINIMAL_API_URL", "https://minimal-chatbot.vercel.app/api/chat")
 VERCEL_SESSION_PREFIX = os.getenv("VERCEL_SESSION_PREFIX", "")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o")
@@ -40,9 +36,8 @@ PERPLEXED_API_ENDPOINT = os.getenv("PERPLEXED_API_ENDPOINT", "https://d21l5c617z
 FELO_MODEL_ID = os.getenv("FELO_MODEL_ID", "felo")
 FELO_API_ENDPOINT = os.getenv("FELO_API_ENDPOINT", "https://api.felo.ai/search/threads")
 
-# FLOWITH backend configuration
-FLOWITH_API_ENDPOINT = os.getenv("FLOWITH_API_ENDPOINT", "https://edge.flowith.net/ai/chat?mode=general")
-FLOWITH_SYSTEM_PROMPT = os.getenv("FLOWITH_SYSTEM_PROMPT", "You are a helpful assistant.")
+# GPT-OSS backend configuration
+GPT_OSS_API_ENDPOINT = os.getenv("GPT_OSS_API_ENDPOINT", "https://api.gpt-oss.com/chatkit")
 
 # SSE headers to improve real-time delivery and disable proxy buffering
 SSE_HEADERS = {
@@ -140,20 +135,7 @@ def _new_felo_session() -> requests.Session:
     return s
 
 
-def _new_flowith_session() -> requests.Session:
-    s = requests.Session()
-    s.headers.update({
-        "accept": "*/*",
-        "accept-encoding": "gzip, deflate, br, zstd",
-        "accept-language": "en-US,en;q=0.9,en-IN;q=0.8",
-        "content-type": "application/json",
-        "origin": "https://flowith.io",
-        "referer": "https://edge.flowith.net/",
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
-        "dnt": "1",
-        "sec-gpc": "1",
-    })
-    return s
+
 
 
 @app.get("/")
@@ -428,20 +410,30 @@ async def chat_completions(request: Request):
         }
         return JSONResponse(content=response)
 
-    if model in FLOWITH_MODELS:
-        session = _new_flowith_session()
-        node_id = str(uuid.uuid4())
-        payload = {
-            "model": model,
-            "messages": [
-                {"content": FLOWITH_SYSTEM_PROMPT, "role": "system"},
-                {"content": user_text, "role": "user"},
-            ],
-            "stream": True if stream else False,
-            "nodeId": node_id,
+    if model in GPT_OSS_MODELS:
+        # Use GPT-OSS API with proper thread creation
+        data = {
+            "op": "threads.create",
+            "params": {
+                "input": {
+                    "text": user_text,
+                    "content": [{"type": "input_text", "text": user_text}],
+                    "quoted_text": "",
+                    "attachments": []
+                }
+            }
         }
+        
+        # Generate headers using LitAgent
+        headers = LitAgent().generate_fingerprint()
+        headers.update({
+            "accept": "text/event-stream",
+            "x-reasoning-effort": "high",
+            "x-selected-model": model if model in GPT_OSS_MODELS else GPT_OSS_MODELS[0],
+            "x-show-reasoning": "true"
+        })
 
-        def flowith_sse_generator() -> Generator[bytes, None, None]:
+        def gpt_oss_sse_generator() -> Generator[bytes, None, None]:
             chat_id = _generate_id("chatcmpl")
             created = _now_unix()
             initial_chunk = {
@@ -456,68 +448,31 @@ async def chat_completions(request: Request):
             yield f"data: {json.dumps(initial_chunk)}\n\n".encode("utf-8")
 
             try:
-                with session.post(FLOWITH_API_ENDPOINT, json=payload, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
-                    resp.raise_for_status()
-                    encoding = (resp.headers.get("Content-Encoding") or "").lower()
-                    if encoding == "zstd":
-                        try:
-                            import zstandard as zstd  # lazy import
-                            dctx = zstd.ZstdDecompressor()
-                            with dctx.stream_reader(resp.raw) as reader:
-                                while True:
-                                    chunk = reader.read(256)
-                                    if not chunk:
-                                        break
-                                    text = chunk.decode("utf-8", errors="replace")
-                                    if not text:
-                                        continue
-                                    # Split text further for real-time feel
-                                    step = 32
-                                    for i in range(0, len(text), step):
-                                        piece = text[i:i+step]
-                                        if not piece:
-                                            continue
-                                        chunk_payload = {
-                                            "id": chat_id,
-                                            "object": "chat.completion.chunk",
-                                            "created": created,
-                                            "model": model,
-                                            "choices": [
-                                                {"index": 0, "delta": {"content": piece}, "finish_reason": None}
-                                            ],
-                                        }
-                                        yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
-                        except Exception as e:
-                            error_chunk = {
-                                "id": _generate_id("err"),
-                                "object": "error",
-                                "created": _now_unix(),
-                                "message": str(e),
+                with requests.post(GPT_OSS_API_ENDPOINT, headers=headers, json=data, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+                    response.raise_for_status()
+                    for chunk in sanitize_stream(
+                        response.iter_lines(),
+                        intro_value="data: ",
+                        to_json=True,
+                        skip_markers=["[DONE]"],
+                        strip_chars=None,
+                        content_extractor=lambda d: d.get('update', {}).get('delta') if d.get('type') == 'thread.item_updated' and d.get('update', {}).get('type') == 'assistant_message.content_part.text_delta' else None,
+                        yield_raw_on_error=False,
+                        encoding="utf-8",
+                        raw=False
+                    ):
+                        if chunk:
+                            chunk_payload = {
+                                "id": chat_id,
+                                "object": "chat.completion.chunk",
+                                "created": created,
+                                "model": model,
+                                "choices": [
+                                    {"index": 0, "delta": {"content": chunk}, "finish_reason": None}
+                                ],
                             }
-                            yield f"data: {json.dumps(error_chunk)}\n\n".encode("utf-8")
-                    else:
-                        for chunk in resp.iter_content(chunk_size=256):
-                            if not chunk:
-                                break
-                            text = chunk.decode("utf-8", errors="replace")
-                            if not text:
-                                continue
-                            step = 32
-                            for i in range(0, len(text), step):
-                                piece = text[i:i+step]
-                                if not piece:
-                                    continue
-                                chunk_payload = {
-                                    "id": chat_id,
-                                    "object": "chat.completion.chunk",
-                                    "created": created,
-                                    "model": model,
-                                    "choices": [
-                                        {"index": 0, "delta": {"content": piece}, "finish_reason": None}
-                                    ],
-                                }
-                                yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
-            except requests.exceptions.RequestException as e:
+                            yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
+            except Exception as e:
                 error_chunk = {
                     "id": _generate_id("err"),
                     "object": "error",
@@ -529,26 +484,27 @@ async def chat_completions(request: Request):
                 yield b"data: [DONE]\n\n"
 
         if stream:
-            return StreamingResponse(flowith_sse_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
+            return StreamingResponse(gpt_oss_sse_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
-        # Non-streaming
+        # Non-streaming: accumulate all chunks
         full_text = ""
         try:
-            with session.post(FLOWITH_API_ENDPOINT, json=payload, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
-                resp.raise_for_status()
-                encoding = (resp.headers.get("Content-Encoding") or "").lower()
-                if encoding == "zstd":
-                    try:
-                        import zstandard as zstd
-                        dctx = zstd.ZstdDecompressor()
-                        with dctx.stream_reader(resp.raw) as reader:
-                            decompressed = reader.read()
-                            full_text = decompressed.decode("utf-8", errors="replace")
-                    except Exception as e:
-                        return JSONResponse(status_code=502, content={"error": {"message": str(e), "type": "bad_gateway"}})
-                else:
-                    full_text = resp.text
-        except requests.exceptions.RequestException as e:
+            with requests.post(GPT_OSS_API_ENDPOINT, headers=headers, json=data, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+                response.raise_for_status()
+                for chunk in sanitize_stream(
+                    response.iter_lines(),
+                    intro_value="data: ",
+                    to_json=True,
+                    skip_markers=["[DONE]"],
+                    strip_chars=None,
+                    content_extractor=lambda d: d.get('update', {}).get('delta') if d.get('type') == 'thread.item_updated' and d.get('update', {}).get('type') == 'assistant_message.content_part.text_delta' else None,
+                    yield_raw_on_error=False,
+                    encoding="utf-8",
+                    raw=False
+                ):
+                    if chunk:
+                        full_text += chunk
+        except Exception as e:
             return JSONResponse(status_code=502, content={"error": {"message": str(e), "type": "bad_gateway"}})
 
         response = {
