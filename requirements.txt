@@ -2,3 +2,4 @@ fastapi==0.110.0
 uvicorn[standard]==0.29.0
 requests==2.32.3
 zstandard==0.23.0
+webscout==8.3.5

@@ -13,3 +13,5 @@ services:
         value: https://minimal-chatbot.vercel.app/api/chat
       - key: DEFAULT_MODEL
         value: gpt-4o
+      - key: GPT_OSS_API_ENDPOINT
+        value: https://api.gpt-oss.com/chatkit
