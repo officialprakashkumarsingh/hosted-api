@@ -18,12 +18,62 @@ GPT_OSS_MODELS: List[str] = [
     "gpt-oss-20b",
     "gpt-oss-120b",
 ]
+
+# DeepInfra Free Models (No API Key Required)
+DEEPINFRA_FREE_MODELS: List[str] = [
+    # DeepSeek Models (7 models) - Best reasoning and speed
+    "deepseek-ai/DeepSeek-R1-0528-Turbo",
+    "deepseek-ai/DeepSeek-V3-0324-Turbo",
+    "deepseek-ai/DeepSeek-Prover-V2-671B",
+    "deepseek-ai/DeepSeek-R1-0528",
+    "deepseek-ai/DeepSeek-V3-0324",
+    "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
+    "deepseek-ai/DeepSeek-V3",
+
+    # Qwen Models (8 models) - Advanced reasoning and coding
+    "Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+    "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "Qwen/Qwen3-30B-A3B",
+    "Qwen/Qwen3-32B",
+    "Qwen/Qwen3-14B",
+    "Qwen/QwQ-32B",
+
+    # Meta LLaMA Models (5 models) - Latest and fastest
+    "meta-llama/Llama-4-Maverick-17B-128E-Instruct-Turbo",
+    "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+    "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "meta-llama/Llama-3.3-70B-Instruct",
+
+    # Microsoft Models (3 models) - Reasoning and multimodal
+    "microsoft/phi-4-reasoning-plus",
+    "microsoft/Phi-4-multimodal-instruct",
+    "microsoft/phi-4",
+
+    # Google Models (2 models) - Lightweight and fast
+    "google/gemma-3-12b-it",
+    "google/gemma-3-4b-it",
+
+    # Specialized Models (9 models)
+    "moonshotai/Kimi-K2-Instruct",
+    "NovaSky-AI/Sky-T1-32B-Preview",
+    "mistralai/Devstral-Small-2505",
+    "mistralai/Devstral-Small-2507",
+    "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+    "zai-org/GLM-4.5-Air",
+    "zai-org/GLM-4.5",
+    "zai-org/GLM-4.5V",
+    "allenai/olmOCR-7B-0725-FP8",
+]
+
 VERCEL_MODELS: List[str] = [
     "gpt-4o",
     "gpt-4o-mini",
     "perplexed",
     "felo",
-] + GPT_OSS_MODELS
+] + GPT_OSS_MODELS + DEEPINFRA_FREE_MODELS
 VERCEL_MINIMAL_API_URL = os.getenv("VERCEL_MINIMAL_API_URL", "https://minimal-chatbot.vercel.app/api/chat")
 VERCEL_SESSION_PREFIX = os.getenv("VERCEL_SESSION_PREFIX", "")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o")
@@ -38,6 +88,9 @@ FELO_API_ENDPOINT = os.getenv("FELO_API_ENDPOINT", "https://api.felo.ai/search/t
 
 # GPT-OSS backend configuration
 GPT_OSS_API_ENDPOINT = os.getenv("GPT_OSS_API_ENDPOINT", "https://api.gpt-oss.com/chatkit")
+
+# DeepInfra backend configuration
+DEEPINFRA_API_ENDPOINT = os.getenv("DEEPINFRA_API_ENDPOINT", "https://api.deepinfra.com/v1/openai/chat/completions")
 
 # SSE headers to improve real-time delivery and disable proxy buffering
 SSE_HEADERS = {
@@ -423,7 +476,7 @@ async def chat_completions(request: Request):
                 }
             }
         }
-        
+
         # Generate headers using LitAgent
         headers = LitAgent().generate_fingerprint()
         headers.update({
@@ -518,6 +571,75 @@ async def chat_completions(request: Request):
             "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
         }
         return JSONResponse(content=response)
+
+    if model in DEEPINFRA_FREE_MODELS:
+        # Use DeepInfra API (OpenAI-compatible) - No API key required for free models
+        payload = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": body.get("max_tokens", 1000),
+            "stream": stream,
+            "temperature": body.get("temperature", 0.7),
+        }
+        
+        # Optional parameters
+        if "top_p" in body:
+            payload["top_p"] = body["top_p"]
+        if "presence_penalty" in body:
+            payload["presence_penalty"] = body["presence_penalty"]
+        if "frequency_penalty" in body:
+            payload["frequency_penalty"] = body["frequency_penalty"]
+        
+        # Generate headers using LitAgent for better compatibility
+        headers = LitAgent().generate_fingerprint()
+        headers.update({
+            "Accept": "application/json" if not stream else "text/event-stream",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+            "Origin": "https://deepinfra.com",
+            "Referer": "https://deepinfra.com/",
+            "X-Deepinfra-Source": "web-embed",
+        })
+
+        def deepinfra_sse_generator() -> Generator[bytes, None, None]:
+            try:
+                with requests.post(DEEPINFRA_API_ENDPOINT, headers=headers, json=payload, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+                    response.raise_for_status()
+                    
+                    for line in response.iter_lines(decode_unicode=True):
+                        if line and line.startswith("data: "):
+                            chunk_data = line[6:]
+                            if chunk_data == "[DONE]":
+                                break
+                            try:
+                                # Parse and forward the chunk as-is (DeepInfra uses OpenAI format)
+                                chunk_json = json.loads(chunk_data)
+                                yield f"data: {json.dumps(chunk_json)}\n\n".encode("utf-8")
+                            except json.JSONDecodeError:
+                                continue
+                                
+            except Exception as e:
+                error_chunk = {
+                    "id": _generate_id("err"),
+                    "object": "error", 
+                    "created": _now_unix(),
+                    "message": f"DeepInfra API error: {str(e)}",
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n".encode("utf-8")
+            finally:
+                yield b"data: [DONE]\n\n"
+
+        if stream:
+            return StreamingResponse(deepinfra_sse_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
+
+        # Non-streaming request
+        try:
+            response = requests.post(DEEPINFRA_API_ENDPOINT, headers=headers, json=payload, timeout=REQUEST_TIMEOUT_SECONDS)
+            response.raise_for_status()
+            return JSONResponse(content=response.json())
+        except Exception as e:
+            return JSONResponse(status_code=502, content={"error": {"message": f"DeepInfra API error: {str(e)}", "type": "bad_gateway"}})
 
     # Build message payload matching minimal-chatbot expectations
     if image_url:
