@@ -20,51 +20,30 @@ GPT_OSS_MODELS: List[str] = [
     "gpt-oss-120b",
 ]
 
-# ExaChat Free Models (No API Key Required) - Multiple Providers
+# ExaChat Free Models (No API Key Required) - Curated Selection
 EXACHAT_MODELS: List[str] = [
     # ExaAnswer Models - Search specialized
     "exaanswer",
-
-    # XAI Models - Advanced reasoning
-    "grok-3-mini-beta",
     
-    # Gemini Models - Latest Google AI
+    # Gemini Models - Latest Google AI (selected)
     "gemini-2.0-flash",
-    "gemini-2.0-flash-exp-image-generation",
     "gemini-2.0-flash-thinking-exp-01-21",
     "gemini-2.5-flash-lite-preview-06-17",
-    "gemini-2.0-pro-exp-02-05",
     "gemini-2.5-flash",
     
-    # OpenRouter Free Models - Premium models without cost
-    "mistralai/mistral-small-3.1-24b-instruct:free",
+    # OpenRouter Free Models - Premium models without cost (selected)
     "deepseek/deepseek-r1:free",
-    "deepseek/deepseek-chat-v3-0324:free",
-    "google/gemma-3-27b-it:free",
     "meta-llama/llama-4-maverick:free",
     
-    # Groq Models - Ultra-fast inference
+    # Groq Models - Ultra-fast inference (selected)
     "deepseek-r1-distill-llama-70b",
-    "deepseek-r1-distill-qwen-32b",
-    "gemma2-9b-it",
-    "llama-3.1-8b-instant",
-    "llama-3.2-1b-preview",
-    "llama-3.2-3b-preview",
-    "llama-3.2-90b-vision-preview",
     "llama-3.3-70b-specdec",
     "llama-3.3-70b-versatile",
-    "llama3-70b-8192",
-    "llama3-8b-8192",
-    "qwen-2.5-32b",
-    "qwen-2.5-coder-32b",
     "qwen-qwq-32b",
     "meta-llama/llama-4-scout-17b-16e-instruct",
     
-    # Cerebras Models - Reliable performance
-    "llama3.1-8b",
-    "llama-3.3-70b",
+    # Cerebras Models - Reliable performance (selected)
     "llama-4-scout-17b-16e-instruct",
-    "qwen-3-32b",
 ]
 
 VERCEL_MODELS: List[str] = [
@@ -217,19 +196,14 @@ def _get_exachat_provider_from_model(model: str) -> str:
     """Determine the ExaChat provider based on the model name"""
     if model == "exaanswer":
         return "exaanswer"
-    elif model == "grok-3-mini-beta":
-        return "xai"
     elif model.startswith("gemini-"):
         return "gemini"
-    elif "/" in model and any(x in model for x in ["mistralai", "deepseek", "google", "meta-llama"]):
+    elif "/" in model and any(x in model for x in ["deepseek", "meta-llama"]):
         return "openrouter"
-    elif model in ["deepseek-r1-distill-llama-70b", "deepseek-r1-distill-qwen-32b", "gemma2-9b-it", 
-                   "llama-3.1-8b-instant", "llama-3.2-1b-preview", "llama-3.2-3b-preview", 
-                   "llama-3.2-90b-vision-preview", "llama-3.3-70b-specdec", "llama-3.3-70b-versatile",
-                   "llama3-70b-8192", "llama3-8b-8192", "qwen-2.5-32b", "qwen-2.5-coder-32b", 
+    elif model in ["deepseek-r1-distill-llama-70b", "llama-3.3-70b-specdec", "llama-3.3-70b-versatile",
                    "qwen-qwq-32b", "meta-llama/llama-4-scout-17b-16e-instruct"]:
         return "groq"
-    elif model in ["llama3.1-8b", "llama-3.3-70b", "llama-4-scout-17b-16e-instruct", "qwen-3-32b"]:
+    elif model in ["llama-4-scout-17b-16e-instruct"]:
         return "cerebras"
     return "groq"  # Default fallback
 
