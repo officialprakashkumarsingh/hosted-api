@@ -1,0 +1,519 @@
+{
+  "summary": {
+    "total_models": 72,
+    "free_models": 34,
+    "paid_models": 35,
+    "error_models": 3,
+    "test_time": 189.79407143592834,
+    "success_rate": 47.22222222222222
+  },
+  "free_models": [
+    "moonshotai/Kimi-K2-Instruct",
+    "deepseek-ai/DeepSeek-R1-0528-Turbo",
+    "Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+    "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "Qwen/Qwen3-30B-A3B",
+    "Qwen/Qwen3-32B",
+    "Qwen/Qwen3-14B",
+    "deepseek-ai/DeepSeek-V3-0324-Turbo",
+    "deepseek-ai/DeepSeek-Prover-V2-671B",
+    "meta-llama/Llama-4-Maverick-17B-128E-Instruct-Turbo",
+    "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+    "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "deepseek-ai/DeepSeek-R1-0528",
+    "deepseek-ai/DeepSeek-V3-0324",
+    "microsoft/phi-4-reasoning-plus",
+    "Qwen/QwQ-32B",
+    "google/gemma-3-12b-it",
+    "google/gemma-3-4b-it",
+    "microsoft/Phi-4-multimodal-instruct",
+    "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
+    "deepseek-ai/DeepSeek-V3",
+    "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "microsoft/phi-4",
+    "NovaSky-AI/Sky-T1-32B-Preview",
+    "mistralai/Devstral-Small-2505",
+    "mistralai/Devstral-Small-2507",
+    "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+    "zai-org/GLM-4.5-Air",
+    "zai-org/GLM-4.5",
+    "zai-org/GLM-4.5V",
+    "allenai/olmOCR-7B-0725-FP8"
+  ],
+  "paid_models": [
+    "anthropic/claude-4-opus",
+    "anthropic/claude-4-sonnet",
+    "Qwen/Qwen3-235B-A22B",
+    "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+    "google/gemini-2.5-flash",
+    "google/gemini-2.5-pro",
+    "Gryphe/MythoMax-L2-13b",
+    "NousResearch/Hermes-3-Llama-3.1-405B",
+    "NousResearch/Hermes-3-Llama-3.1-70B",
+    "Qwen/Qwen2.5-72B-Instruct",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "Qwen/Qwen2.5-Coder-32B-Instruct",
+    "Sao10K/L3-8B-Lunaris-v1-Turbo",
+    "Sao10K/L3.1-70B-Euryale-v2.2",
+    "Sao10K/L3.3-70B-Euryale-v2.3",
+    "anthropic/claude-3-7-sonnet-latest",
+    "deepseek-ai/DeepSeek-R1",
+    "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+    "deepseek-ai/DeepSeek-R1-Turbo",
+    "google/gemini-2.0-flash-001",
+    "meta-llama/Llama-3.2-11B-Vision-Instruct",
+    "meta-llama/Llama-3.2-1B-Instruct",
+    "meta-llama/Llama-3.2-3B-Instruct",
+    "meta-llama/Llama-3.2-90B-Vision-Instruct",
+    "meta-llama/Meta-Llama-3-70B-Instruct",
+    "meta-llama/Meta-Llama-3-8B-Instruct",
+    "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+    "meta-llama/Meta-Llama-3.1-8B-Instruct",
+    "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+    "microsoft/WizardLM-2-8x22B",
+    "mistralai/Mistral-7B-Instruct-v0.3",
+    "mistralai/Mistral-Nemo-Instruct-2407",
+    "mistralai/Mistral-Small-24B-Instruct-2501",
+    "mistralai/Mixtral-8x7B-Instruct-v0.1",
+    "nvidia/Llama-3.1-Nemotron-70B-Instruct"
+  ],
+  "error_models": [
+    "google/gemma-3-27b-it",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b"
+  ],
+  "detailed_results": [
+    {
+      "model": "anthropic/claude-4-opus",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "moonshotai/Kimi-K2-Instruct",
+      "status": "FREE",
+      "response_time": 0.5309782028198242,
+      "content": "Hi there! How can I help you today?",
+      "tokens": 36
+    },
+    {
+      "model": "anthropic/claude-4-sonnet",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "deepseek-ai/DeepSeek-R1-0528-Turbo",
+      "status": "FREE",
+      "response_time": 0.3727593421936035,
+      "content": "<think>\nHmm, the user just said",
+      "tokens": 13
+    },
+    {
+      "model": "Qwen/Qwen3-235B-A22B-Thinking-2507",
+      "status": "FREE",
+      "response_time": 7.476979494094849,
+      "content": "<think>Okay, the user sent \"Hi\". That's</think>",
+      "tokens": 21
+    },
+    {
+      "model": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+      "status": "FREE",
+      "response_time": 0.719834566116333,
+      "content": "Hello! How can I help you today?",
+      "tokens": 19
+    },
+    {
+      "model": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+      "status": "FREE",
+      "response_time": 0.39677882194519043,
+      "content": "Hello! How can I help you today?",
+      "tokens": 19
+    },
+    {
+      "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+      "status": "FREE",
+      "response_time": 0.5857479572296143,
+      "content": "Hello! \u0669(\u25d5\u203f\u25d5\uff61",
+      "tokens": 19
+    },
+    {
+      "model": "Qwen/Qwen3-235B-A22B",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "Qwen/Qwen3-30B-A3B",
+      "status": "FREE",
+      "response_time": 0.608553409576416,
+      "content": "<think>\nOkay, the user just said \"Hi",
+      "tokens": 19
+    },
+    {
+      "model": "Qwen/Qwen3-32B",
+      "status": "FREE",
+      "response_time": 0.38742733001708984,
+      "content": "<think>\nOkay, the user sent \"Hi\".",
+      "tokens": 19
+    },
+    {
+      "model": "Qwen/Qwen3-14B",
+      "status": "FREE",
+      "response_time": 0.3673408031463623,
+      "content": "<think>\nOkay, the user just said \"Hi",
+      "tokens": 19
+    },
+    {
+      "model": "deepseek-ai/DeepSeek-V3-0324-Turbo",
+      "status": "FREE",
+      "response_time": 0.36553025245666504,
+      "content": "Hello! How can I assist you today",
+      "tokens": 12
+    },
+    {
+      "model": "deepseek-ai/DeepSeek-Prover-V2-671B",
+      "status": "FREE",
+      "response_time": 1.1202480792999268,
+      "content": "Hello! \ud83d\ude0a How can I help you",
+      "tokens": 13
+    },
+    {
+      "model": "meta-llama/Llama-4-Maverick-17B-128E-Instruct-Turbo",
+      "status": "FREE",
+      "response_time": 0.22519850730895996,
+      "content": "It's nice to meet you. Is",
+      "tokens": 18
+    },
+    {
+      "model": "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+      "status": "FREE",
+      "response_time": 0.32277607917785645,
+      "content": "It's nice to meet you. Is there something I",
+      "tokens": 21
+    },
+    {
+      "model": "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+      "status": "FREE",
+      "response_time": 0.35889530181884766,
+      "content": "Hi! How can I assist you today?",
+      "tokens": 21
+    },
+    {
+      "model": "deepseek-ai/DeepSeek-R1-0528",
+      "status": "FREE",
+      "response_time": 0.5290882587432861,
+      "content": "<think>\nOkay, the user just said \"",
+      "tokens": 13
+    },
+    {
+      "model": "deepseek-ai/DeepSeek-V3-0324",
+      "status": "FREE",
+      "response_time": 0.8826775550842285,
+      "content": "Hello! \ud83d\udc4b How can I assist you today",
+      "tokens": 14
+    },
+    {
+      "model": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "microsoft/phi-4-reasoning-plus",
+      "status": "FREE",
+      "response_time": 0.4371342658996582,
+      "content": "Hello! How can I assist you today? If",
+      "tokens": 18
+    },
+    {
+      "model": "Qwen/QwQ-32B",
+      "status": "FREE",
+      "response_time": 0.7725076675415039,
+      "content": "Okay, the user said \"Hi\". I need",
+      "tokens": 21
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "google/gemini-2.5-pro",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "google/gemma-3-27b-it",
+      "status": "ERROR",
+      "error": "HTTP 429: {\"error\":{\"message\":\"Model busy, retry later\"}}"
+    },
+    {
+      "model": "google/gemma-3-12b-it",
+      "status": "FREE",
+      "response_time": 0.33672213554382324,
+      "content": "Hi there! How can I help you today?",
+      "tokens": 20
+    },
+    {
+      "model": "google/gemma-3-4b-it",
+      "status": "FREE",
+      "response_time": 0.28614377975463867,
+      "content": "Hi there! How\u2019s your day going so",
+      "tokens": 20
+    },
+    {
+      "model": "microsoft/Phi-4-multimodal-instruct",
+      "status": "FREE",
+      "response_time": 0.33751988410949707,
+      "content": "Hi there! How can I help you today?",
+      "tokens": 20
+    },
+    {
+      "model": "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
+      "status": "FREE",
+      "response_time": 0.5549533367156982,
+      "content": "<think>\n\n</think>\n\nHello! How can I assist",
+      "tokens": 14
+    },
+    {
+      "model": "deepseek-ai/DeepSeek-V3",
+      "status": "FREE",
+      "response_time": 0.7450504302978516,
+      "content": "Hello! How can I assist you today?",
+      "tokens": 13
+    },
+    {
+      "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      "status": "FREE",
+      "response_time": 0.320173978805542,
+      "content": "It's nice to meet you. Is there something",
+      "tokens": 21
+    },
+    {
+      "model": "meta-llama/Llama-3.3-70B-Instruct",
+      "status": "FREE",
+      "response_time": 0.9581034183502197,
+      "content": "How's it going? Is there something I can",
+      "tokens": 21
+    },
+    {
+      "model": "microsoft/phi-4",
+      "status": "FREE",
+      "response_time": 0.3998408317565918,
+      "content": "Hello! How can I assist you today?",
+      "tokens": 17
+    },
+    {
+      "model": "Gryphe/MythoMax-L2-13b",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "NousResearch/Hermes-3-Llama-3.1-405B",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "NousResearch/Hermes-3-Llama-3.1-70B",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "NovaSky-AI/Sky-T1-32B-Preview",
+      "status": "FREE",
+      "response_time": 0.3369903564453125,
+      "content": "<think>\nOkay, the user just said \"Hi",
+      "tokens": 19
+    },
+    {
+      "model": "Qwen/Qwen2.5-72B-Instruct",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "Qwen/Qwen2.5-7B-Instruct",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "Qwen/Qwen2.5-Coder-32B-Instruct",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "Sao10K/L3-8B-Lunaris-v1-Turbo",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "Sao10K/L3.1-70B-Euryale-v2.2",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "Sao10K/L3.3-70B-Euryale-v2.3",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "anthropic/claude-3-7-sonnet-latest",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "deepseek-ai/DeepSeek-R1",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "deepseek-ai/DeepSeek-R1-Turbo",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "google/gemini-2.0-flash-001",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "meta-llama/Llama-3.2-11B-Vision-Instruct",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "meta-llama/Llama-3.2-1B-Instruct",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "meta-llama/Llama-3.2-3B-Instruct",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "meta-llama/Llama-3.2-90B-Vision-Instruct",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "meta-llama/Meta-Llama-3-70B-Instruct",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "meta-llama/Meta-Llama-3-8B-Instruct",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "microsoft/WizardLM-2-8x22B",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "mistralai/Devstral-Small-2505",
+      "status": "FREE",
+      "response_time": 0.655311107635498,
+      "content": "Hello! How can I assist you today?",
+      "tokens": 14
+    },
+    {
+      "model": "mistralai/Devstral-Small-2507",
+      "status": "FREE",
+      "response_time": 0.6374857425689697,
+      "content": "Hello! How can I assist you today? If",
+      "tokens": 14
+    },
+    {
+      "model": "mistralai/Mistral-7B-Instruct-v0.3",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "mistralai/Mistral-Nemo-Instruct-2407",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "mistralai/Mistral-Small-24B-Instruct-2501",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+      "status": "FREE",
+      "response_time": 2.4547886848449707,
+      "content": "Hello! \ud83d\ude0a How can I help you",
+      "tokens": 14
+    },
+    {
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "nvidia/Llama-3.1-Nemotron-70B-Instruct",
+      "status": "PAID",
+      "error": "Authentication required"
+    },
+    {
+      "model": "zai-org/GLM-4.5-Air",
+      "status": "FREE",
+      "response_time": 0.3463413715362549,
+      "content": "<think>Okay, the user just sent a simple</think>",
+      "tokens": 16
+    },
+    {
+      "model": "zai-org/GLM-4.5",
+      "status": "FREE",
+      "response_time": 0.5279524326324463,
+      "content": "Hello! How can I help you",
+      "tokens": 16
+    },
+    {
+      "model": "zai-org/GLM-4.5V",
+      "status": "FREE",
+      "response_time": 0.3855564594268799,
+      "content": "<think>I noticed the user just said \"Hi\"</think>",
+      "tokens": 17
+    },
+    {
+      "model": "openai/gpt-oss-120b",
+      "status": "ERROR",
+      "error": "The read operation timed out"
+    },
+    {
+      "model": "openai/gpt-oss-20b",
+      "status": "ERROR",
+      "response_time": 0.2344825267791748,
+      "error": "Empty content"
+    },
+    {
+      "model": "allenai/olmOCR-7B-0725-FP8",
+      "status": "FREE",
+      "response_time": 0.6162974834442139,
+      "content": "Hello! How can I assist you today?",
+      "tokens": 30
+    }
+  ]
+}
