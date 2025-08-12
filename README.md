@@ -11,6 +11,13 @@ Supported models:
 - felo
 - gpt-oss-20b
 - gpt-oss-120b
+- **34 DeepInfra Free Models** (No API key required):
+  - DeepSeek models (R1, V3, Prover, etc.)
+  - Qwen models (480B Coder, 235B Thinking, etc.)
+  - Meta LLaMA-4 models (Maverick, Scout)
+  - Microsoft Phi-4 models
+  - Google Gemma-3 models
+  - And many more specialized models
 
 ## Run locally
 
@@ -34,6 +41,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 3000
   - `FELO_API_ENDPOINT` (default: `https://api.felo.ai/search/threads`)
   - `FELO_MODEL_ID` (default: `felo`)
   - `GPT_OSS_API_ENDPOINT` (default: `https://api.gpt-oss.com/chatkit`)
+  - `DEEPINFRA_API_ENDPOINT` (default: `https://api.deepinfra.com/v1/openai/chat/completions`)
 
 ## Models
 
@@ -107,8 +115,42 @@ curl -N https://<host>/v1/chat/completions \
   }'
 ```
 
+- DeepInfra Free Models (streaming):
+```bash
+curl -N https://<host>/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "deepseek-ai/DeepSeek-R1-0528-Turbo",
+    "stream": true,
+    "messages": [{"role": "user", "content": "Explain quantum computing"}]
+  }'
+```
+
+- DeepInfra Coding Models:
+```bash
+curl -N https://<host>/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "stream": true,
+    "messages": [{"role": "user", "content": "Write a Python function to sort a list"}]
+  }'
+```
+
+- DeepInfra Reasoning Models:
+```bash
+curl -N https://<host>/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "stream": true,
+    "messages": [{"role": "user", "content": "Solve this step by step: 2x + 5 = 15"}]
+  }'
+```
+
 Notes:
 - PERPLEXED and FELO streams are converted into incremental deltas based on their respective stream formats.
 - GPT-OSS models use advanced reasoning with thread-based API and LitAgent fingerprinting.
+- **DeepInfra models work completely FREE without any API key** - 34 models available including DeepSeek-R1, Qwen-480B, LLaMA-4, and more.
 
 SDKs: set baseURL to your service and use the desired `model` above. No API key is required.
