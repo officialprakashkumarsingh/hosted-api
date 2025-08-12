@@ -33,12 +33,9 @@ EXACHAT_MODELS: List[str] = [
     
     # OpenRouter Free Models - Premium models without cost (selected)
     "deepseek/deepseek-r1:free",
-    "meta-llama/llama-4-maverick:free",
     
     # Groq Models - Ultra-fast inference (selected)
     "deepseek-r1-distill-llama-70b",
-    "llama-3.3-70b-specdec",
-    "llama-3.3-70b-versatile",
     "qwen-qwq-32b",
     "meta-llama/llama-4-scout-17b-16e-instruct",
     
@@ -200,8 +197,7 @@ def _get_exachat_provider_from_model(model: str) -> str:
         return "gemini"
     elif "/" in model and any(x in model for x in ["deepseek", "meta-llama"]):
         return "openrouter"
-    elif model in ["deepseek-r1-distill-llama-70b", "llama-3.3-70b-specdec", "llama-3.3-70b-versatile",
-                   "qwen-qwq-32b", "meta-llama/llama-4-scout-17b-16e-instruct"]:
+    elif model in ["deepseek-r1-distill-llama-70b", "qwen-qwq-32b", "meta-llama/llama-4-scout-17b-16e-instruct"]:
         return "groq"
     elif model in ["llama-4-scout-17b-16e-instruct"]:
         return "cerebras"
