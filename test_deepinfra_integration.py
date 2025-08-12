@@ -37,7 +37,6 @@ def test_non_streaming(model):
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": "Say hello in one sentence"}],
-            "max_tokens": 50,
             "stream": False
         }
         
@@ -65,7 +64,6 @@ def test_streaming(model):
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": "Count from 1 to 3"}],
-            "max_tokens": 50,
             "stream": True
         }
         

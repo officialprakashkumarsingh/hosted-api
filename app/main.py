@@ -577,10 +577,13 @@ async def chat_completions(request: Request):
         payload = {
             "model": model,
             "messages": messages,
-            "max_tokens": body.get("max_tokens", 1000),
             "stream": stream,
             "temperature": body.get("temperature", 0.7),
         }
+        
+        # Only include max_tokens if explicitly provided by the user
+        if "max_tokens" in body:
+            payload["max_tokens"] = body["max_tokens"]
         
         # Optional parameters
         if "top_p" in body:

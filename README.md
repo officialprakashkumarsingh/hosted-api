@@ -152,5 +152,6 @@ Notes:
 - PERPLEXED and FELO streams are converted into incremental deltas based on their respective stream formats.
 - GPT-OSS models use advanced reasoning with thread-based API and LitAgent fingerprinting.
 - **DeepInfra models work completely FREE without any API key** - 34 models available including DeepSeek-R1, Qwen-480B, LLaMA-4, and more.
+- **No token limits imposed** - Full response generation allowed unless explicitly limited by user.
 
 SDKs: set baseURL to your service and use the desired `model` above. No API key is required.
