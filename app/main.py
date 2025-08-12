@@ -8,6 +8,7 @@ import uuid
 import os
 from webscout.litagent import LitAgent
 from webscout.AIutel import sanitize_stream
+from curl_cffi.requests import Session
 
 app = FastAPI(title="OpenAI-Compatible Proxy (Vercel minimal)")
 
@@ -19,53 +20,51 @@ GPT_OSS_MODELS: List[str] = [
     "gpt-oss-120b",
 ]
 
-# DeepInfra Free Models (No API Key Required)
-DEEPINFRA_FREE_MODELS: List[str] = [
-    # DeepSeek Models (7 models) - Best reasoning and speed
-    "deepseek-ai/DeepSeek-R1-0528-Turbo",
-    "deepseek-ai/DeepSeek-V3-0324-Turbo",
-    "deepseek-ai/DeepSeek-Prover-V2-671B",
-    "deepseek-ai/DeepSeek-R1-0528",
-    "deepseek-ai/DeepSeek-V3-0324",
-    "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
-    "deepseek-ai/DeepSeek-V3",
+# ExaChat Free Models (No API Key Required) - Multiple Providers
+EXACHAT_MODELS: List[str] = [
+    # ExaAnswer Models - Search specialized
+    "exaanswer",
 
-    # Qwen Models (8 models) - Advanced reasoning and coding
-    "Qwen/Qwen3-235B-A22B-Thinking-2507",
-    "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-    "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
-    "Qwen/Qwen3-235B-A22B-Instruct-2507",
-    "Qwen/Qwen3-30B-A3B",
-    "Qwen/Qwen3-32B",
-    "Qwen/Qwen3-14B",
-    "Qwen/QwQ-32B",
-
-    # Meta LLaMA Models (5 models) - Latest and fastest
-    "meta-llama/Llama-4-Maverick-17B-128E-Instruct-Turbo",
-    "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
-    "meta-llama/Llama-4-Scout-17B-16E-Instruct",
-    "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-    "meta-llama/Llama-3.3-70B-Instruct",
-
-    # Microsoft Models (3 models) - Reasoning and multimodal
-    "microsoft/phi-4-reasoning-plus",
-    "microsoft/Phi-4-multimodal-instruct",
-    "microsoft/phi-4",
-
-    # Google Models (2 models) - Lightweight and fast
-    "google/gemma-3-12b-it",
-    "google/gemma-3-4b-it",
-
-    # Specialized Models (9 models)
-    "moonshotai/Kimi-K2-Instruct",
-    "NovaSky-AI/Sky-T1-32B-Preview",
-    "mistralai/Devstral-Small-2505",
-    "mistralai/Devstral-Small-2507",
-    "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
-    "zai-org/GLM-4.5-Air",
-    "zai-org/GLM-4.5",
-    "zai-org/GLM-4.5V",
-    "allenai/olmOCR-7B-0725-FP8",
+    # XAI Models - Advanced reasoning
+    "grok-3-mini-beta",
+    
+    # Gemini Models - Latest Google AI
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-exp-image-generation",
+    "gemini-2.0-flash-thinking-exp-01-21",
+    "gemini-2.5-flash-lite-preview-06-17",
+    "gemini-2.0-pro-exp-02-05",
+    "gemini-2.5-flash",
+    
+    # OpenRouter Free Models - Premium models without cost
+    "mistralai/mistral-small-3.1-24b-instruct:free",
+    "deepseek/deepseek-r1:free",
+    "deepseek/deepseek-chat-v3-0324:free",
+    "google/gemma-3-27b-it:free",
+    "meta-llama/llama-4-maverick:free",
+    
+    # Groq Models - Ultra-fast inference
+    "deepseek-r1-distill-llama-70b",
+    "deepseek-r1-distill-qwen-32b",
+    "gemma2-9b-it",
+    "llama-3.1-8b-instant",
+    "llama-3.2-1b-preview",
+    "llama-3.2-3b-preview",
+    "llama-3.2-90b-vision-preview",
+    "llama-3.3-70b-specdec",
+    "llama-3.3-70b-versatile",
+    "llama3-70b-8192",
+    "llama3-8b-8192",
+    "qwen-2.5-32b",
+    "qwen-2.5-coder-32b",
+    "qwen-qwq-32b",
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    
+    # Cerebras Models - Reliable performance
+    "llama3.1-8b",
+    "llama-3.3-70b",
+    "llama-4-scout-17b-16e-instruct",
+    "qwen-3-32b",
 ]
 
 VERCEL_MODELS: List[str] = [
@@ -73,7 +72,7 @@ VERCEL_MODELS: List[str] = [
     "gpt-4o-mini",
     "perplexed",
     "felo",
-] + GPT_OSS_MODELS + DEEPINFRA_FREE_MODELS
+] + GPT_OSS_MODELS + EXACHAT_MODELS
 VERCEL_MINIMAL_API_URL = os.getenv("VERCEL_MINIMAL_API_URL", "https://minimal-chatbot.vercel.app/api/chat")
 VERCEL_SESSION_PREFIX = os.getenv("VERCEL_SESSION_PREFIX", "")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o")
@@ -89,8 +88,15 @@ FELO_API_ENDPOINT = os.getenv("FELO_API_ENDPOINT", "https://api.felo.ai/search/t
 # GPT-OSS backend configuration
 GPT_OSS_API_ENDPOINT = os.getenv("GPT_OSS_API_ENDPOINT", "https://api.gpt-oss.com/chatkit")
 
-# DeepInfra backend configuration
-DEEPINFRA_API_ENDPOINT = os.getenv("DEEPINFRA_API_ENDPOINT", "https://api.deepinfra.com/v1/openai/chat/completions")
+# ExaChat backend configuration
+EXACHAT_API_ENDPOINTS = {
+    "exaanswer": "https://ayle.chat/api/exaanswer",
+    "gemini": "https://ayle.chat/api/gemini", 
+    "openrouter": "https://ayle.chat/api/openrouter",
+    "groq": "https://ayle.chat/api/groq",
+    "cerebras": "https://ayle.chat/api/cerebras",
+    "xai": "https://ayle.chat/api/xai",
+}
 
 # SSE headers to improve real-time delivery and disable proxy buffering
 SSE_HEADERS = {
@@ -186,6 +192,80 @@ def _new_felo_session() -> requests.Session:
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
     })
     return s
+
+
+def _new_exachat_session() -> Session:
+    """Create a new ExaChat session with proper headers"""
+    session = Session()
+    agent = LitAgent()
+    
+    headers = {
+        "accept": "*/*",
+        "accept-language": "en-US,en;q=0.9",
+        "content-type": "application/json",
+        "origin": "https://ayle.chat/",
+        "referer": "https://ayle.chat/",
+        "user-agent": agent.random(),
+    }
+    
+    session.headers.update(headers)
+    session.cookies.update({"session": uuid.uuid4().hex})
+    return session
+
+
+def _get_exachat_provider_from_model(model: str) -> str:
+    """Determine the ExaChat provider based on the model name"""
+    if model == "exaanswer":
+        return "exaanswer"
+    elif model == "grok-3-mini-beta":
+        return "xai"
+    elif model.startswith("gemini-"):
+        return "gemini"
+    elif "/" in model and any(x in model for x in ["mistralai", "deepseek", "google", "meta-llama"]):
+        return "openrouter"
+    elif model in ["deepseek-r1-distill-llama-70b", "deepseek-r1-distill-qwen-32b", "gemma2-9b-it", 
+                   "llama-3.1-8b-instant", "llama-3.2-1b-preview", "llama-3.2-3b-preview", 
+                   "llama-3.2-90b-vision-preview", "llama-3.3-70b-specdec", "llama-3.3-70b-versatile",
+                   "llama3-70b-8192", "llama3-8b-8192", "qwen-2.5-32b", "qwen-2.5-coder-32b", 
+                   "qwen-qwq-32b", "meta-llama/llama-4-scout-17b-16e-instruct"]:
+        return "groq"
+    elif model in ["llama3.1-8b", "llama-3.3-70b", "llama-4-scout-17b-16e-instruct", "qwen-3-32b"]:
+        return "cerebras"
+    return "groq"  # Default fallback
+
+
+def _build_exachat_payload(conversation_prompt: str, model: str, provider: str) -> Dict[str, Any]:
+    """Build the appropriate payload based on the ExaChat provider"""
+    if provider == "exaanswer":
+        return {
+            "query": conversation_prompt,
+            "messages": []
+        }
+    elif provider == "gemini":
+        return {
+            "query": conversation_prompt,
+            "model": model,
+            "messages": []
+        }
+    elif provider == "cerebras":
+        return {
+            "query": conversation_prompt,
+            "model": model,
+            "messages": []
+        }
+    else:  # openrouter, groq, xai
+        return {
+            "query": conversation_prompt + "\n",  # Add newline for better formatting
+            "model": model,
+            "messages": []
+        }
+
+
+def _exachat_content_extractor(chunk: Dict[str, Any]) -> Optional[str]:
+    """Extract content from ExaChat stream JSON objects"""
+    if isinstance(chunk, dict):
+        return chunk.get("choices", [{}])[0].get("delta", {}).get("content")
+    return None
 
 
 
@@ -572,77 +652,122 @@ async def chat_completions(request: Request):
         }
         return JSONResponse(content=response)
 
-    if model in DEEPINFRA_FREE_MODELS:
-        # Use DeepInfra API (OpenAI-compatible) - No API key required for free models
-        payload = {
-            "model": model,
-            "messages": messages,
-            "stream": stream,
-            "temperature": body.get("temperature", 0.7),
-        }
+    if model in EXACHAT_MODELS:
+        # Use ExaChat API - Multiple providers, no API key required
+        provider = _get_exachat_provider_from_model(model)
+        endpoint = EXACHAT_API_ENDPOINTS[provider]
+        payload = _build_exachat_payload(user_text, model, provider)
         
-        # Only include max_tokens if explicitly provided by the user
-        if "max_tokens" in body:
-            payload["max_tokens"] = body["max_tokens"]
-        
-        # Optional parameters
-        if "top_p" in body:
-            payload["top_p"] = body["top_p"]
-        if "presence_penalty" in body:
-            payload["presence_penalty"] = body["presence_penalty"]
-        if "frequency_penalty" in body:
-            payload["frequency_penalty"] = body["frequency_penalty"]
-        
-        # Generate headers using LitAgent for better compatibility
-        headers = LitAgent().generate_fingerprint()
-        headers.update({
-            "Accept": "application/json" if not stream else "text/event-stream",
-            "Accept-Encoding": "gzip, deflate, br, zstd",
-            "Content-Type": "application/json",
-            "Cache-Control": "no-cache",
-            "Origin": "https://deepinfra.com",
-            "Referer": "https://deepinfra.com/",
-            "X-Deepinfra-Source": "web-embed",
-        })
+        session = _new_exachat_session()
 
-        def deepinfra_sse_generator() -> Generator[bytes, None, None]:
+        def exachat_sse_generator() -> Generator[bytes, None, None]:
+            chat_id = _generate_id("chatcmpl")
+            created = _now_unix()
+            initial_chunk = {
+                "id": chat_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [
+                    {"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}
+                ],
+            }
+            yield f"data: {json.dumps(initial_chunk)}\n\n".encode("utf-8")
+
             try:
-                with requests.post(DEEPINFRA_API_ENDPOINT, headers=headers, json=payload, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-                    response.raise_for_status()
-                    
-                    for line in response.iter_lines(decode_unicode=True):
-                        if line and line.startswith("data: "):
-                            chunk_data = line[6:]
-                            if chunk_data == "[DONE]":
-                                break
-                            try:
-                                # Parse and forward the chunk as-is (DeepInfra uses OpenAI format)
-                                chunk_json = json.loads(chunk_data)
-                                yield f"data: {json.dumps(chunk_json)}\n\n".encode("utf-8")
-                            except json.JSONDecodeError:
-                                continue
-                                
+                response = session.post(
+                    endpoint,
+                    json=payload,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                    stream=True,
+                    impersonate="chrome120"
+                )
+                response.raise_for_status()
+                
+                # Process streaming response with sanitize_stream
+                processed_stream = sanitize_stream(
+                    data=response.iter_content(chunk_size=None),
+                    intro_value=None,
+                    to_json=True,
+                    content_extractor=_exachat_content_extractor,
+                    yield_raw_on_error=False,
+                    raw=False
+                )
+                
+                for content_chunk in processed_stream:
+                    if content_chunk and isinstance(content_chunk, str):
+                        # Clean up escaped characters
+                        content_chunk = content_chunk.replace('\\\\', '\\').replace('\\"', '"')
+                        chunk_payload = {
+                            "id": chat_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model,
+                            "choices": [
+                                {"index": 0, "delta": {"content": content_chunk}, "finish_reason": None}
+                            ],
+                        }
+                        yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
+                        
             except Exception as e:
                 error_chunk = {
                     "id": _generate_id("err"),
                     "object": "error", 
                     "created": _now_unix(),
-                    "message": f"DeepInfra API error: {str(e)}",
+                    "message": f"ExaChat API error: {str(e)}",
                 }
                 yield f"data: {json.dumps(error_chunk)}\n\n".encode("utf-8")
             finally:
+                session.close()
                 yield b"data: [DONE]\n\n"
 
         if stream:
-            return StreamingResponse(deepinfra_sse_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
+            return StreamingResponse(exachat_sse_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
         # Non-streaming request
+        session = _new_exachat_session()
         try:
-            response = requests.post(DEEPINFRA_API_ENDPOINT, headers=headers, json=payload, timeout=REQUEST_TIMEOUT_SECONDS)
+            response = session.post(
+                endpoint,
+                json=payload,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                stream=True,
+                impersonate="chrome120"
+            )
             response.raise_for_status()
-            return JSONResponse(content=response.json())
+            
+            # Collect all chunks into full response
+            full_text = ""
+            processed_stream = sanitize_stream(
+                data=response.iter_content(chunk_size=None),
+                intro_value=None,
+                to_json=True,
+                content_extractor=_exachat_content_extractor,
+                yield_raw_on_error=False,
+                raw=False
+            )
+            
+            for content_chunk in processed_stream:
+                if content_chunk and isinstance(content_chunk, str):
+                    content_chunk = content_chunk.replace('\\\\', '\\').replace('\\"', '"')
+                    full_text += content_chunk
+            
+            response_obj = {
+                "id": _generate_id("chatcmpl"),
+                "object": "chat.completion",
+                "created": _now_unix(),
+                "model": model,
+                "choices": [
+                    {"index": 0, "message": {"role": "assistant", "content": full_text}, "finish_reason": "stop"}
+                ],
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            }
+            return JSONResponse(content=response_obj)
+            
         except Exception as e:
-            return JSONResponse(status_code=502, content={"error": {"message": f"DeepInfra API error: {str(e)}", "type": "bad_gateway"}})
+            return JSONResponse(status_code=502, content={"error": {"message": f"ExaChat API error: {str(e)}", "type": "bad_gateway"}})
+        finally:
+            session.close()
 
     # Build message payload matching minimal-chatbot expectations
     if image_url:
