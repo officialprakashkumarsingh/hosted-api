@@ -6,6 +6,7 @@ import json
 import time
 import uuid
 import os
+import zstandard as zstd
 from webscout.litagent import LitAgent
 from webscout.AIutel import sanitize_stream
 from curl_cffi.requests import Session
@@ -43,12 +44,41 @@ EXACHAT_MODELS: List[str] = [
     "llama-4-scout-17b-16e-instruct",
 ]
 
+# Flowith Free Models (No API Key Required) - 100% Working
+FLOWITH_MODELS: List[str] = [
+    # GPT-5 Models - Next generation (exclusive)
+    "gpt-5-nano",
+    "gpt-5-mini",
+    
+    # GLM Models - Advanced reasoning
+    "glm-4.5",
+    
+    # GPT-OSS Models - Large context with thinking
+    "gpt-oss-120b",
+    "gpt-oss-20b",
+    
+    # Specialized Models
+    "kimi-k2",
+    
+    # GPT-4.1 Models - Enhanced versions
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    
+    # DeepSeek Models - Latest variants
+    "deepseek-chat",
+    "deepseek-reasoner",
+    
+    # Latest Generation
+    "gemini-2.5-flash",
+    "grok-3-mini",
+]
+
 VERCEL_MODELS: List[str] = [
     "gpt-4o",
     "gpt-4o-mini",
     "perplexed",
     "felo",
-] + GPT_OSS_MODELS + EXACHAT_MODELS
+] + GPT_OSS_MODELS + EXACHAT_MODELS + FLOWITH_MODELS
 VERCEL_MINIMAL_API_URL = os.getenv("VERCEL_MINIMAL_API_URL", "https://minimal-chatbot.vercel.app/api/chat")
 VERCEL_SESSION_PREFIX = os.getenv("VERCEL_SESSION_PREFIX", "")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o")
@@ -73,6 +103,9 @@ EXACHAT_API_ENDPOINTS = {
     "cerebras": "https://ayle.chat/api/cerebras",
     "xai": "https://ayle.chat/api/xai",
 }
+
+# Flowith backend configuration
+FLOWITH_API_ENDPOINT = "https://edge.flowith.net/ai/chat?mode=general"
 
 # SSE headers to improve real-time delivery and disable proxy buffering
 SSE_HEADERS = {
@@ -238,7 +271,39 @@ def _exachat_content_extractor(chunk: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _new_flowith_session() -> requests.Session:
+    """Create a new Flowith session with proper headers"""
+    session = requests.Session()
+    agent = LitAgent()
+    fingerprint = agent.generate_fingerprint("chrome")
+    
+    headers = {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "accept-language": "en-US,en;q=0.9,en-IN;q=0.8",
+        "content-type": "application/json",
+        "origin": "https://flowith.io",
+        "referer": "https://edge.flowith.net/",
+        "user-agent": fingerprint["user_agent"],
+        "dnt": "1",
+        "sec-gpc": "1"
+    }
+    
+    session.headers.update(headers)
+    return session
 
+
+def _build_flowith_payload(conversation_prompt: str, model: str, stream: bool = False) -> Dict[str, Any]:
+    """Build the appropriate payload for Flowith API"""
+    return {
+        "model": model,
+        "messages": [
+            {"content": "You are a helpful assistant.", "role": "system"},
+            {"content": conversation_prompt, "role": "user"}
+        ],
+        "stream": stream,
+        "nodeId": str(uuid.uuid4())
+    }
 
 
 @app.get("/")
@@ -738,6 +803,120 @@ async def chat_completions(request: Request):
             return JSONResponse(status_code=502, content={"error": {"message": f"ExaChat API error: {str(e)}", "type": "bad_gateway"}})
         finally:
             session.close()
+
+    if model in FLOWITH_MODELS:
+        # Use Flowith API - 12 models, no API key required, 100% working
+        payload = _build_flowith_payload(user_text, model, stream)
+        session = _new_flowith_session()
+
+        def flowith_sse_generator() -> Generator[bytes, None, None]:
+            chat_id = _generate_id("chatcmpl")
+            created = _now_unix()
+            initial_chunk = {
+                "id": chat_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [
+                    {"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}
+                ],
+            }
+            yield f"data: {json.dumps(initial_chunk)}\n\n".encode("utf-8")
+
+            try:
+                response = session.post(
+                    FLOWITH_API_ENDPOINT,
+                    json=payload,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                    stream=True
+                )
+                response.raise_for_status()
+                
+                # Handle potential ZSTD compression
+                encoding = response.headers.get('Content-Encoding', '').lower()
+                if encoding == 'zstd':
+                    dctx = zstd.ZstdDecompressor()
+                    with dctx.stream_reader(response.raw) as reader:
+                        while True:
+                            chunk = reader.read(4096)
+                            if not chunk:
+                                break
+                            text = chunk.decode('utf-8', errors='replace')
+                            if text.strip():
+                                chunk_payload = {
+                                    "id": chat_id,
+                                    "object": "chat.completion.chunk",
+                                    "created": created,
+                                    "model": model,
+                                    "choices": [
+                                        {"index": 0, "delta": {"content": text}, "finish_reason": None}
+                                    ],
+                                }
+                                yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
+                else:
+                    for chunk in response.iter_content(chunk_size=4096):
+                        if not chunk:
+                            break
+                        text = chunk.decode('utf-8', errors='replace')
+                        if text.strip():
+                            chunk_payload = {
+                                "id": chat_id,
+                                "object": "chat.completion.chunk",
+                                "created": created,
+                                "model": model,
+                                "choices": [
+                                    {"index": 0, "delta": {"content": text}, "finish_reason": None}
+                                ],
+                            }
+                            yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
+                        
+            except Exception as e:
+                error_chunk = {
+                    "id": _generate_id("err"),
+                    "object": "error", 
+                    "created": _now_unix(),
+                    "message": f"Flowith API error: {str(e)}",
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n".encode("utf-8")
+            finally:
+                yield b"data: [DONE]\n\n"
+
+        if stream:
+            return StreamingResponse(flowith_sse_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
+
+        # Non-streaming request
+        try:
+            response = session.post(
+                FLOWITH_API_ENDPOINT,
+                json=payload,
+                timeout=REQUEST_TIMEOUT_SECONDS
+            )
+            response.raise_for_status()
+            
+            # Handle potential ZSTD compression
+            encoding = response.headers.get('Content-Encoding', '').lower()
+            if encoding == 'zstd':
+                dctx = zstd.ZstdDecompressor()
+                with dctx.stream_reader(response.raw) as reader:
+                    decompressed = reader.read()
+                    full_text = decompressed.decode('utf-8', errors='replace')
+            else:
+                full_text = response.text
+            
+            response_obj = {
+                "id": _generate_id("chatcmpl"),
+                "object": "chat.completion",
+                "created": _now_unix(),
+                "model": model,
+                "choices": [
+                    {"index": 0, "message": {"role": "assistant", "content": full_text}, "finish_reason": "stop"}
+                ],
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            }
+            return JSONResponse(content=response_obj)
+            
+        except Exception as e:
+            return JSONResponse(status_code=502, content={"error": {"message": f"Flowith API error: {str(e)}", "type": "bad_gateway"}})
 
     # Build message payload matching minimal-chatbot expectations
     if image_url:
