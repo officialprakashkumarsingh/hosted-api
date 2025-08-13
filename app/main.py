@@ -148,12 +148,18 @@ HECKAI_MODELS: List[str] = [
     "meta-llama/llama-4-scout",
 ]
 
+# SCNet Models (No API Key Required) - 1 model: MiniMax 456B
+SCNET_MODELS: List[str] = [
+    # MiniMax Models (456B Parameters - MASSIVE!)
+    "minimax-text-01-456B",
+]
+
 VERCEL_MODELS: List[str] = [
     "gpt-4o",
     "gpt-4o-mini",
     "perplexed",
     "felo",
-] + GPT_OSS_MODELS + EXACHAT_MODELS + FLOWITH_MODELS + DEEPINFRA_MODELS + HECKAI_MODELS
+] + GPT_OSS_MODELS + EXACHAT_MODELS + FLOWITH_MODELS + DEEPINFRA_MODELS + HECKAI_MODELS + SCNET_MODELS
 VERCEL_MINIMAL_API_URL = os.getenv("VERCEL_MINIMAL_API_URL", "https://minimal-chatbot.vercel.app/api/chat")
 VERCEL_SESSION_PREFIX = os.getenv("VERCEL_SESSION_PREFIX", "")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o")
@@ -187,6 +193,9 @@ DEEPINFRA_API_ENDPOINT = "https://api.deepinfra.com/v1/openai/chat/completions"
 
 # HeckAI backend configuration
 HECKAI_API_ENDPOINT = "https://api.heckai.weight-wave.com/api/ha/v1/chat"
+
+# SCNet backend configuration
+SCNET_API_ENDPOINT = "https://www.scnet.cn/acx/chatbot/v1/chat/completion"
 
 # SSE headers to improve real-time delivery and disable proxy buffering
 SSE_HEADERS = {
@@ -468,6 +477,55 @@ def _build_heckai_payload(conversation_prompt: str, model: str, session_id: str,
         "imgUrls": [],
         "superSmartMode": False
     }
+
+
+def _new_scnet_session() -> Session:
+    """Create a new SCNet session with proper headers and cookies"""
+    session = Session()
+    
+    # Generate a random token for cookies
+    import secrets
+    token = secrets.token_hex(16)
+    
+    headers = {
+        "accept": "text/event-stream",
+        "content-type": "application/json",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0",
+        "referer": "https://www.scnet.cn/ui/chatbot/temp_1744712663464",
+        "origin": "https://www.scnet.cn",
+    }
+    
+    session.headers.update(headers)
+    session.cookies.set("Token", token)
+    return session
+
+
+def _build_scnet_payload(conversation_prompt: str, model: str) -> Dict[str, Any]:
+    """Build the appropriate payload for SCNet API"""
+    # Map model name to model ID
+    model_map = {
+        "minimax-text-01-456B": 8,  # MiniMax 456B model
+    }
+    
+    model_id = model_map.get(model, 8)  # Default to MiniMax if not found
+    
+    return {
+        "conversationId": "",
+        "content": f"SYSTEM: You are a helpful assistant. USER: {conversation_prompt}",
+        "thinking": 0,
+        "online": 0,
+        "modelId": model_id,
+        "textFile": [],
+        "imageFile": [],
+        "clusterId": ""
+    }
+
+
+def _scnet_content_extractor(chunk: Dict[str, Any]) -> Optional[str]:
+    """Extract content from SCNet stream JSON objects"""
+    if isinstance(chunk, dict):
+        return chunk.get("content")
+    return None
 
 
 @app.get("/")
@@ -1299,6 +1357,112 @@ async def chat_completions(request: Request):
             
         except Exception as e:
             return JSONResponse(status_code=502, content={"error": {"message": f"HeckAI API error: {str(e)}", "type": "bad_gateway"}})
+
+    if model in SCNET_MODELS:
+        # Use SCNet API - 1 model: MiniMax 456B (largest available model)
+        payload = _build_scnet_payload(user_text, model)
+        session = _new_scnet_session()
+
+        def scnet_sse_generator() -> Generator[bytes, None, None]:
+            chat_id = _generate_id("chatcmpl")
+            created = _now_unix()
+            initial_chunk = {
+                "id": chat_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [
+                    {"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}
+                ],
+            }
+            yield f"data: {json.dumps(initial_chunk)}\n\n".encode("utf-8")
+
+            try:
+                response = session.post(
+                    SCNET_API_ENDPOINT,
+                    json=payload,
+                    stream=True,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                    impersonate="chrome120"
+                )
+                response.raise_for_status()
+                
+                # Process streaming response with sanitize_stream
+                processed_stream = sanitize_stream(
+                    data=response.iter_content(chunk_size=None),
+                    intro_value="data:",
+                    to_json=True,
+                    skip_markers=["[done]"],
+                    content_extractor=_scnet_content_extractor,
+                    yield_raw_on_error=False
+                )
+                
+                for content_chunk in processed_stream:
+                    if content_chunk and isinstance(content_chunk, str):
+                        chunk_payload = {
+                            "id": chat_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model,
+                            "choices": [
+                                {"index": 0, "delta": {"content": content_chunk}, "finish_reason": None}
+                            ],
+                        }
+                        yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
+                        
+            except Exception as e:
+                error_chunk = {
+                    "id": _generate_id("err"),
+                    "object": "error", 
+                    "created": _now_unix(),
+                    "message": f"SCNet API error: {str(e)}",
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n".encode("utf-8")
+            finally:
+                yield b"data: [DONE]\n\n"
+
+        if stream:
+            return StreamingResponse(scnet_sse_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
+
+        # Non-streaming request
+        try:
+            response = session.post(
+                SCNET_API_ENDPOINT,
+                json=payload,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                impersonate="chrome120"
+            )
+            response.raise_for_status()
+            
+            # Process non-streaming response with sanitize_stream
+            processed_stream = sanitize_stream(
+                data=response.iter_content(chunk_size=None),
+                intro_value="data:",
+                to_json=True,
+                skip_markers=["[done]"],
+                content_extractor=_scnet_content_extractor,
+                yield_raw_on_error=False
+            )
+            
+            full_text = ""
+            for content_chunk in processed_stream:
+                if content_chunk and isinstance(content_chunk, str):
+                    full_text += content_chunk
+            
+            response_obj = {
+                "id": _generate_id("chatcmpl"),
+                "object": "chat.completion",
+                "created": _now_unix(),
+                "model": model,
+                "choices": [
+                    {"index": 0, "message": {"role": "assistant", "content": full_text}, "finish_reason": "stop"}
+                ],
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            }
+            return JSONResponse(content=response_obj)
+            
+        except Exception as e:
+            return JSONResponse(status_code=502, content={"error": {"message": f"SCNet API error: {str(e)}", "type": "bad_gateway"}})
 
     # Build message payload matching minimal-chatbot expectations
     if image_url:
