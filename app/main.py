@@ -132,12 +132,28 @@ DEEPINFRA_MODELS: List[str] = [
     "allenai/olmOCR-7B-0725-FP8",
 ]
 
+# HeckAI Working Models (No API Key Required) - 5 models tested working
+HECKAI_MODELS: List[str] = [
+    # DeepSeek Models
+    "deepseek/deepseek-chat",
+    "deepseek/deepseek-r1",
+    
+    # OpenAI Models
+    "openai/gpt-4o-mini",
+    
+    # X.AI Models (Unique Grok Access!)
+    "x-ai/grok-3-mini-beta",
+    
+    # Meta Models
+    "meta-llama/llama-4-scout",
+]
+
 VERCEL_MODELS: List[str] = [
     "gpt-4o",
     "gpt-4o-mini",
     "perplexed",
     "felo",
-] + GPT_OSS_MODELS + EXACHAT_MODELS + FLOWITH_MODELS + DEEPINFRA_MODELS
+] + GPT_OSS_MODELS + EXACHAT_MODELS + FLOWITH_MODELS + DEEPINFRA_MODELS + HECKAI_MODELS
 VERCEL_MINIMAL_API_URL = os.getenv("VERCEL_MINIMAL_API_URL", "https://minimal-chatbot.vercel.app/api/chat")
 VERCEL_SESSION_PREFIX = os.getenv("VERCEL_SESSION_PREFIX", "")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o")
@@ -168,6 +184,9 @@ EXACHAT_API_ENDPOINTS = {
 
 # DeepInfra backend configuration
 DEEPINFRA_API_ENDPOINT = "https://api.deepinfra.com/v1/openai/chat/completions"
+
+# HeckAI backend configuration
+HECKAI_API_ENDPOINT = "https://api.heckai.weight-wave.com/api/ha/v1/chat"
 
 # SSE headers to improve real-time delivery and disable proxy buffering
 SSE_HEADERS = {
@@ -419,6 +438,36 @@ def _deepinfra_content_extractor(chunk: Dict[str, Any]) -> Optional[str]:
     if isinstance(chunk, dict):
         return chunk.get("choices", [{}])[0].get("delta", {}).get("content")
     return None
+
+
+def _new_heckai_session() -> Session:
+    """Create a new HeckAI session with proper headers"""
+    session = Session()
+    agent = LitAgent()
+    
+    headers = {
+        'Content-Type': 'application/json',
+        'Origin': 'https://heck.ai',
+        'Referer': 'https://heck.ai/',
+        'User-Agent': agent.random(),
+    }
+    
+    session.headers.update(headers)
+    return session
+
+
+def _build_heckai_payload(conversation_prompt: str, model: str, session_id: str, previous_question: str = None, previous_answer: str = None) -> Dict[str, Any]:
+    """Build the appropriate payload for HeckAI API"""
+    return {
+        "model": model,
+        "question": conversation_prompt,
+        "language": "English",
+        "sessionId": session_id,
+        "previousQuestion": previous_question,
+        "previousAnswer": previous_answer,
+        "imgUrls": [],
+        "superSmartMode": False
+    }
 
 
 @app.get("/")
@@ -1135,6 +1184,121 @@ async def chat_completions(request: Request):
             
         except Exception as e:
             return JSONResponse(status_code=502, content={"error": {"message": f"DeepInfra API error: {str(e)}", "type": "bad_gateway"}})
+
+    if model in HECKAI_MODELS:
+        # Use HeckAI API - 5 models, no API key required, includes unique Grok 3 access
+        session_id = str(uuid.uuid4())
+        payload = _build_heckai_payload(user_text, model, session_id)
+        session = _new_heckai_session()
+
+        def heckai_sse_generator() -> Generator[bytes, None, None]:
+            chat_id = _generate_id("chatcmpl")
+            created = _now_unix()
+            initial_chunk = {
+                "id": chat_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [
+                    {"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}
+                ],
+            }
+            yield f"data: {json.dumps(initial_chunk)}\n\n".encode("utf-8")
+
+            try:
+                response = session.post(
+                    HECKAI_API_ENDPOINT,
+                    data=json.dumps(payload),
+                    stream=True,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                    impersonate="chrome110"
+                )
+                response.raise_for_status()
+                
+                # Process streaming response with sanitize_stream
+                processed_stream = sanitize_stream(
+                    data=response.iter_content(chunk_size=1024),
+                    intro_value="data: ",
+                    to_json=False,
+                    start_marker="data: [ANSWER_START]",
+                    end_marker="data: [ANSWER_DONE]",
+                    skip_markers=["data: [RELATE_Q_START]", "data: [RELATE_Q_DONE]", "data: [REASON_START]", "data: [REASON_DONE]"],
+                    yield_raw_on_error=True,
+                    strip_chars=" \n\r\t",
+                    raw=False
+                )
+                
+                for content_chunk in processed_stream:
+                    if content_chunk and isinstance(content_chunk, str):
+                        content_chunk = content_chunk.replace('\\\\', '\\').replace('\\"', '"')
+                        chunk_payload = {
+                            "id": chat_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model,
+                            "choices": [
+                                {"index": 0, "delta": {"content": content_chunk}, "finish_reason": None}
+                            ],
+                        }
+                        yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
+                        
+            except Exception as e:
+                error_chunk = {
+                    "id": _generate_id("err"),
+                    "object": "error", 
+                    "created": _now_unix(),
+                    "message": f"HeckAI API error: {str(e)}",
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n".encode("utf-8")
+            finally:
+                yield b"data: [DONE]\n\n"
+
+        if stream:
+            return StreamingResponse(heckai_sse_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
+
+        # Non-streaming request
+        try:
+            response = session.post(
+                HECKAI_API_ENDPOINT,
+                data=json.dumps(payload),
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                impersonate="chrome110"
+            )
+            response.raise_for_status()
+            
+            # Process non-streaming response with sanitize_stream
+            processed_stream = sanitize_stream(
+                data=response.iter_content(chunk_size=1024),
+                intro_value="data: ",
+                to_json=False,
+                start_marker="data: [ANSWER_START]",
+                end_marker="data: [ANSWER_DONE]",
+                skip_markers=["data: [RELATE_Q_START]", "data: [RELATE_Q_DONE]", "data: [REASON_START]", "data: [REASON_DONE]"],
+                yield_raw_on_error=True,
+                strip_chars=" \n\r\t",
+                raw=False
+            )
+            
+            full_text = ""
+            for content_chunk in processed_stream:
+                if content_chunk and isinstance(content_chunk, str):
+                    content_chunk = content_chunk.replace('\\\\', '\\').replace('\\"', '"')
+                    full_text += content_chunk
+            
+            response_obj = {
+                "id": _generate_id("chatcmpl"),
+                "object": "chat.completion",
+                "created": _now_unix(),
+                "model": model,
+                "choices": [
+                    {"index": 0, "message": {"role": "assistant", "content": full_text}, "finish_reason": "stop"}
+                ],
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            }
+            return JSONResponse(content=response_obj)
+            
+        except Exception as e:
+            return JSONResponse(status_code=502, content={"error": {"message": f"HeckAI API error: {str(e)}", "type": "bad_gateway"}})
 
     # Build message payload matching minimal-chatbot expectations
     if image_url:
