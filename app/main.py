@@ -37,41 +37,42 @@ EXACHAT_MODELS: List[str] = [
     
     # Groq Models - Ultra-fast inference (selected)
     "deepseek-r1-distill-llama-70b",
-    "qwen-qwq-32b",
+    # "qwen-qwq-32b",  # Temporarily disabled due to HTTP 500 errors
     "meta-llama/llama-4-scout-17b-16e-instruct",
     
     # Cerebras Models - Reliable performance (selected)
     "llama-4-scout-17b-16e-instruct",
 ]
 
-# Flowith Free Models (No API Key Required) - 100% Working
-FLOWITH_MODELS: List[str] = [
-    # GPT-5 Models - Next generation (exclusive)
-    "gpt-5-nano",
-    "gpt-5-mini",
-    
-    # GLM Models - Advanced reasoning
-    "glm-4.5",
-    
-    # GPT-OSS Models - Large context with thinking
-    "gpt-oss-120b",
-    "gpt-oss-20b",
-    
-    # Specialized Models
-    "kimi-k2",
-    
-    # GPT-4.1 Models - Enhanced versions
-    "gpt-4.1",
-    "gpt-4.1-mini",
-    
-    # DeepSeek Models - Latest variants
-    "deepseek-chat",
-    "deepseek-reasoner",
-    
-    # Latest Generation
-    "gemini-2.5-flash",
-    "grok-3-mini",
-]
+# Flowith Free Models - TEMPORARILY DISABLED due to rate limiting (429 errors)
+# FLOWITH_MODELS: List[str] = [
+#     # GPT-5 Models - Next generation (exclusive)
+#     "gpt-5-nano",
+#     "gpt-5-mini",
+#     
+#     # GLM Models - Advanced reasoning
+#     "glm-4.5",
+#     
+#     # GPT-OSS Models - Large context with thinking
+#     "gpt-oss-120b",
+#     "gpt-oss-20b",
+#     
+#     # Specialized Models
+#     "kimi-k2",
+#     
+#     # GPT-4.1 Models - Enhanced versions
+#     "gpt-4.1",
+#     "gpt-4.1-mini",
+#     
+#     # DeepSeek Models - Latest variants
+#     "deepseek-chat",
+#     "deepseek-reasoner",
+#     
+#     # Latest Generation
+#     "gemini-2.5-flash",
+#     "grok-3-mini",
+# ]
+FLOWITH_MODELS: List[str] = []  # Disabled due to rate limiting
 
 VERCEL_MODELS: List[str] = [
     "gpt-4o",
@@ -104,8 +105,8 @@ EXACHAT_API_ENDPOINTS = {
     "xai": "https://ayle.chat/api/xai",
 }
 
-# Flowith backend configuration
-FLOWITH_API_ENDPOINT = "https://edge.flowith.net/ai/chat?mode=general"
+# Flowith backend configuration - TEMPORARILY DISABLED
+# FLOWITH_API_ENDPOINT = "https://edge.flowith.net/ai/chat?mode=general"
 
 # SSE headers to improve real-time delivery and disable proxy buffering
 SSE_HEADERS = {
@@ -230,7 +231,7 @@ def _get_exachat_provider_from_model(model: str) -> str:
         return "gemini"
     elif "/" in model and any(x in model for x in ["deepseek", "meta-llama"]):
         return "openrouter"
-    elif model in ["deepseek-r1-distill-llama-70b", "qwen-qwq-32b", "meta-llama/llama-4-scout-17b-16e-instruct"]:
+    elif model in ["deepseek-r1-distill-llama-70b", "meta-llama/llama-4-scout-17b-16e-instruct"]:
         return "groq"
     elif model in ["llama-4-scout-17b-16e-instruct"]:
         return "cerebras"
@@ -805,7 +806,7 @@ async def chat_completions(request: Request):
             session.close()
 
     if model in FLOWITH_MODELS:
-        # Use Flowith API - 12 models, no API key required, 100% working
+        # Use Flowith API - TEMPORARILY DISABLED due to rate limiting (429 errors)
         payload = _build_flowith_payload(user_text, model, stream)
         session = _new_flowith_session()
 
