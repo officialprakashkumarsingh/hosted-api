@@ -74,12 +74,70 @@ EXACHAT_MODELS: List[str] = [
 # ]
 FLOWITH_MODELS: List[str] = []  # Disabled due to rate limiting
 
+# DeepInfra Working Models (No API Key Required) - 37 models tested working
+DEEPINFRA_MODELS: List[str] = [
+    # Latest Generation Models
+    "moonshotai/Kimi-K2-Instruct",
+    "deepseek-ai/DeepSeek-R1-0528-Turbo",
+    "Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+    "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    
+    # Qwen 3 Models with Thinking
+    "Qwen/Qwen3-30B-A3B",
+    "Qwen/Qwen3-32B", 
+    "Qwen/Qwen3-14B",
+    "Qwen/QwQ-32B",
+    
+    # DeepSeek Models
+    "deepseek-ai/DeepSeek-V3-0324-Turbo",
+    "deepseek-ai/DeepSeek-Prover-V2-671B",
+    "deepseek-ai/DeepSeek-R1-0528",
+    "deepseek-ai/DeepSeek-V3-0324",
+    "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
+    "deepseek-ai/DeepSeek-V3",
+    
+    # LLaMA 4 Models (Latest!)
+    "meta-llama/Llama-4-Maverick-17B-128E-Instruct-Turbo",
+    "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+    "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    
+    # LLaMA 3.3 Models
+    "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "meta-llama/Llama-3.3-70B-Instruct",
+    
+    # Microsoft Models
+    "microsoft/phi-4-reasoning-plus",
+    "microsoft/Phi-4-multimodal-instruct",
+    "microsoft/phi-4",
+    
+    # Google Models (Gemma 3)
+    "google/gemma-3-27b-it",
+    "google/gemma-3-12b-it",
+    "google/gemma-3-4b-it",
+    
+    # Mistral Models
+    "mistralai/Devstral-Small-2505",
+    "mistralai/Devstral-Small-2507",
+    "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+    
+    # Other Notable Models
+    "NovaSky-AI/Sky-T1-32B-Preview",
+    "zai-org/GLM-4.5-Air",
+    "zai-org/GLM-4.5",
+    "zai-org/GLM-4.5V",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "allenai/olmOCR-7B-0725-FP8",
+]
+
 VERCEL_MODELS: List[str] = [
     "gpt-4o",
     "gpt-4o-mini",
     "perplexed",
     "felo",
-] + GPT_OSS_MODELS + EXACHAT_MODELS + FLOWITH_MODELS
+] + GPT_OSS_MODELS + EXACHAT_MODELS + FLOWITH_MODELS + DEEPINFRA_MODELS
 VERCEL_MINIMAL_API_URL = os.getenv("VERCEL_MINIMAL_API_URL", "https://minimal-chatbot.vercel.app/api/chat")
 VERCEL_SESSION_PREFIX = os.getenv("VERCEL_SESSION_PREFIX", "")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o")
@@ -107,6 +165,9 @@ EXACHAT_API_ENDPOINTS = {
 
 # Flowith backend configuration - TEMPORARILY DISABLED
 # FLOWITH_API_ENDPOINT = "https://edge.flowith.net/ai/chat?mode=general"
+
+# DeepInfra backend configuration
+DEEPINFRA_API_ENDPOINT = "https://api.deepinfra.com/v1/openai/chat/completions"
 
 # SSE headers to improve real-time delivery and disable proxy buffering
 SSE_HEADERS = {
@@ -305,6 +366,59 @@ def _build_flowith_payload(conversation_prompt: str, model: str, stream: bool = 
         "stream": stream,
         "nodeId": str(uuid.uuid4())
     }
+
+
+def _new_deepinfra_session() -> Session:
+    """Create a new DeepInfra session with proper headers"""
+    session = Session()
+    agent = LitAgent()
+    fingerprint = agent.generate_fingerprint("chrome")
+    
+    headers = {
+        "Accept": fingerprint["accept"],
+        "Accept-Language": fingerprint["accept_language"],
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache",
+        "Origin": "https://deepinfra.com",
+        "Pragma": "no-cache",
+        "Referer": "https://deepinfra.com/",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-site",
+        "X-Deepinfra-Source": "web-embed",
+        "User-Agent": fingerprint.get("user_agent", ""),
+        "Sec-CH-UA": fingerprint.get("sec_ch_ua", ""),
+        "Sec-CH-UA-Mobile": "?0",
+        "Sec-CH-UA-Platform": f'"{fingerprint.get("platform", "")}"',
+        "X-Forwarded-For": fingerprint.get("x-forwarded-for", ""),
+        "X-Real-IP": fingerprint.get("x-real-ip", ""),
+        "X-Client-IP": fingerprint.get("x-client-ip", ""),
+        "Forwarded": fingerprint.get("forwarded", ""),
+        "X-Forwarded-Proto": fingerprint.get("x-forwarded-proto", ""),
+        "X-Request-Id": fingerprint.get("x-request-id", ""),
+    }
+    
+    session.headers.update(headers)
+    return session
+
+
+def _build_deepinfra_payload(conversation_prompt: str, model: str, stream: bool = False) -> Dict[str, Any]:
+    """Build the appropriate payload for DeepInfra API"""
+    return {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": conversation_prompt}
+        ],
+        "stream": stream
+    }
+
+
+def _deepinfra_content_extractor(chunk: Dict[str, Any]) -> Optional[str]:
+    """Extract content from DeepInfra stream JSON objects"""
+    if isinstance(chunk, dict):
+        return chunk.get("choices", [{}])[0].get("delta", {}).get("content")
+    return None
 
 
 @app.get("/")
@@ -918,6 +1032,109 @@ async def chat_completions(request: Request):
             
         except Exception as e:
             return JSONResponse(status_code=502, content={"error": {"message": f"Flowith API error: {str(e)}", "type": "bad_gateway"}})
+
+    if model in DEEPINFRA_MODELS:
+        # Use DeepInfra API - 37 models, no API key required, latest AI models
+        payload = _build_deepinfra_payload(user_text, model, stream)
+        session = _new_deepinfra_session()
+
+        def deepinfra_sse_generator() -> Generator[bytes, None, None]:
+            chat_id = _generate_id("chatcmpl")
+            created = _now_unix()
+            initial_chunk = {
+                "id": chat_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [
+                    {"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}
+                ],
+            }
+            yield f"data: {json.dumps(initial_chunk)}\n\n".encode("utf-8")
+
+            try:
+                response = session.post(
+                    DEEPINFRA_API_ENDPOINT,
+                    data=json.dumps(payload),
+                    stream=True,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                    impersonate="chrome110"
+                )
+                response.raise_for_status()
+                
+                # Process streaming response with sanitize_stream
+                processed_stream = sanitize_stream(
+                    data=response.iter_content(chunk_size=None),
+                    intro_value="data:",
+                    to_json=True,
+                    skip_markers=["[DONE]"],
+                    content_extractor=_deepinfra_content_extractor,
+                    yield_raw_on_error=False
+                )
+                
+                for content_chunk in processed_stream:
+                    if content_chunk and isinstance(content_chunk, str):
+                        chunk_payload = {
+                            "id": chat_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model,
+                            "choices": [
+                                {"index": 0, "delta": {"content": content_chunk}, "finish_reason": None}
+                            ],
+                        }
+                        yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
+                        
+            except Exception as e:
+                error_chunk = {
+                    "id": _generate_id("err"),
+                    "object": "error", 
+                    "created": _now_unix(),
+                    "message": f"DeepInfra API error: {str(e)}",
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n".encode("utf-8")
+            finally:
+                yield b"data: [DONE]\n\n"
+
+        if stream:
+            return StreamingResponse(deepinfra_sse_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
+
+        # Non-streaming request
+        try:
+            response = session.post(
+                DEEPINFRA_API_ENDPOINT,
+                data=json.dumps(payload),
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                impersonate="chrome110"
+            )
+            response.raise_for_status()
+            
+            # Parse non-streaming JSON response
+            processed_stream = sanitize_stream(
+                data=response.text,
+                to_json=True,
+                intro_value=None,
+                content_extractor=lambda chunk: chunk.get("choices", [{}])[0].get("message", {}).get("content") if isinstance(chunk, dict) else None,
+                yield_raw_on_error=False
+            )
+            
+            full_text = next(processed_stream, "")
+            full_text = full_text if isinstance(full_text, str) else ""
+            
+            response_obj = {
+                "id": _generate_id("chatcmpl"),
+                "object": "chat.completion",
+                "created": _now_unix(),
+                "model": model,
+                "choices": [
+                    {"index": 0, "message": {"role": "assistant", "content": full_text}, "finish_reason": "stop"}
+                ],
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            }
+            return JSONResponse(content=response_obj)
+            
+        except Exception as e:
+            return JSONResponse(status_code=502, content={"error": {"message": f"DeepInfra API error: {str(e)}", "type": "bad_gateway"}})
 
     # Build message payload matching minimal-chatbot expectations
     if image_url:
