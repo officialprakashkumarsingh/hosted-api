@@ -154,7 +154,7 @@ SCNET_MODELS: List[str] = [
     "minimax-text-01-456B",
 ]
 
-# Refact Models (No API Key Required) - 13 working models with streaming
+# Refact Models (No API Key Required) - 12 working models with streaming
 REFACT_MODELS: List[str] = [
     # GPT-4 Series - Premium performance
     "gpt-4o",
