@@ -1,0 +1,58 @@
+{
+  "gpt-4o": {
+    "success": true,
+    "result": "Hello! I'm an AI designed to provide information and assist with a wide range of questions and tasks."
+  },
+  "gpt-4o-mini": {
+    "success": true,
+    "result": "Hello! I'm an AI language model designed to assist with a wide range of questions and topics, providing information and engaging in conversation."
+  },
+  "o4-mini": {
+    "success": false,
+    "result": "Request error: 400 Client Error: Bad Request for url: https://inference.smallcloud.ai/v1/chat/completions"
+  },
+  "gpt-4.1": {
+    "success": true,
+    "result": "Hello! I\u2019m ChatGPT, an AI language model created by OpenAI designed to assist, inform, and converse with you on a wide range of topics."
+  },
+  "gpt-4.1-mini": {
+    "success": true,
+    "result": "Hello! I'm ChatGPT, an AI language model here to help with information, answer questions, and assist with a variety of tasks."
+  },
+  "gpt-4.1-nano": {
+    "success": true,
+    "result": "Hello! I am an AI language model designed to assist with a wide range of questions and tasks by generating human-like text based on my training data."
+  },
+  "gpt-5": {
+    "success": true,
+    "result": "Hello! I\u2019m an AI assistant designed to help you find answers, solve problems, and create useful content quickly and clearly."
+  },
+  "gpt-5-mini": {
+    "success": true,
+    "result": "Hello \u2014 I'm an AI language model called ChatGPT that can understand and generate text to help with questions, brainstorming, writing, coding, and more."
+  },
+  "gpt-5-nano": {
+    "success": true,
+    "result": "Hello! I\u2019m ChatGPT, an AI language model here to help with information, ideas, and conversation across a wide range of topics."
+  },
+  "claude-sonnet-4": {
+    "success": true,
+    "result": "Hello! I'm Claude, an AI assistant created by Anthropic to be helpful, harmless, and honest in conversations and tasks."
+  },
+  "claude-opus-4": {
+    "success": true,
+    "result": "Hello! I'm Claude, an AI assistant created by Anthropic to be helpful, harmless, and honest in our conversations."
+  },
+  "claude-opus-4.1": {
+    "success": true,
+    "result": "Hello! I'm Claude, an AI assistant created by Anthropic to be helpful, harmless, and honest in our conversations."
+  },
+  "gemini-2.5-pro": {
+    "success": true,
+    "result": "\nHello"
+  },
+  "gemini-2.5-pro-preview": {
+    "success": true,
+    "result": "\nHello"
+  }
+}
