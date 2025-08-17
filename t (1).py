@@ -58,8 +58,7 @@ class GPTOSSChatbot:
             response = self.session.post(
                 f"{self.base_url}/chatkit",
                 json=payload,
-                stream=True,
-                timeout=30
+                stream=True
             )
             response.raise_for_status()
             
@@ -101,8 +100,8 @@ class GPTOSSChatbot:
                         entry = update.get('entry', {})
                         if entry.get('type') == 'thought':
                             content = entry.get('content', '')
-                            if content and len(content) > 50:  # Only show substantial reasoning
-                                print(f"\n💭 Reasoning: {content[:100]}..." if len(content) > 100 else f"\n💭 Reasoning: {content}")
+                            if content:  # Show all reasoning content without limits
+                                print(f"\n💭 Reasoning: {content}")
                                 reasoning_shown = True
                     
                     # Handle text deltas (streaming response)
