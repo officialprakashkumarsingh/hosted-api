@@ -573,7 +573,6 @@ def _build_refact_payload(conversation_prompt: str, model: str, stream: bool = F
     return {
         "model": model,
         "messages": [{"role": "user", "content": conversation_prompt}],
-        "max_tokens": 2049,
         "stream": stream,
         "temperature": 0.7
     }
