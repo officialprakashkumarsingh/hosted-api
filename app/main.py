@@ -178,12 +178,21 @@ REFACT_MODELS: List[str] = [
     "gemini-2.5-pro-preview",
 ]
 
+# ChatGLM Models (Z.AI) - No API Key Required - Advanced Chinese/English models
+CHATGLM_MODELS: List[str] = [
+    # GLM-4.5 Series - Latest generation
+    "glm-4.5",         # Full 360B model
+    "glm-4.5-Air",     # 106B model  
+    "glm-4.5V",        # Vision model
+    "glm-4-32B",       # Main chat model
+]
+
 VERCEL_MODELS: List[str] = [
     "gpt-4o",
     "gpt-4o-mini",
     "perplexed",
     "felo",
-] + GPT_OSS_MODELS + EXACHAT_MODELS + FLOWITH_MODELS + DEEPINFRA_MODELS + HECKAI_MODELS + SCNET_MODELS + REFACT_MODELS
+] + GPT_OSS_MODELS + EXACHAT_MODELS + FLOWITH_MODELS + DEEPINFRA_MODELS + HECKAI_MODELS + SCNET_MODELS + REFACT_MODELS + CHATGLM_MODELS
 VERCEL_MINIMAL_API_URL = os.getenv("VERCEL_MINIMAL_API_URL", "https://minimal-chatbot.vercel.app/api/chat")
 VERCEL_SESSION_PREFIX = os.getenv("VERCEL_SESSION_PREFIX", "")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o")
@@ -223,6 +232,10 @@ SCNET_API_ENDPOINT = "https://www.scnet.cn/acx/chatbot/v1/chat/completion"
 
 # Refact backend configuration
 REFACT_API_ENDPOINT = "https://inference.smallcloud.ai/v1/chat/completions"
+
+# ChatGLM backend configuration (Z.AI)
+CHATGLM_API_ENDPOINT = "https://chat.z.ai/api/chat/completions"
+CHATGLM_AUTH_ENDPOINT = "https://chat.z.ai/api/v1/auths/"
 
 # SSE headers to improve real-time delivery and disable proxy buffering
 SSE_HEADERS = {
@@ -588,6 +601,71 @@ def _new_refact_session() -> requests.Session:
         "Authorization": f"Bearer {generate_full_api_key()}"
     })
     return session
+
+
+def _new_chatglm_session() -> Session:
+    """Create a new ChatGLM session with proper headers"""
+    session = Session()
+    headers = {
+        'Accept-Language': 'en-US,en;q=0.9',
+        'App-Name': 'chatglm',
+        'Content-Type': 'application/json',
+        'Origin': 'https://chat.z.ai',
+        'User-Agent': LitAgent().random(),
+        'X-App-Platform': 'pc',
+        'X-App-Version': '0.0.1',
+        'Accept': 'text/event-stream',
+    }
+    session.headers.update(headers)
+    return session
+
+def _get_chatglm_token(session: Session) -> str:
+    """Get authentication token for ChatGLM"""
+    try:
+        response = session.get(CHATGLM_AUTH_ENDPOINT, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        token = data.get("token", "")
+        return token
+    except Exception as e:
+        return ""
+
+def _resolve_chatglm_model(model: str) -> str:
+    """Resolve ChatGLM model name to API format"""
+    model_mapping = {
+        "glm-4.5V": "glm-4.5v",
+        "glm-4-32B": "main_chat",
+        "glm-4.5-Air": "0727-106B-API",
+        "glm-4.5": "0727-360B-API",
+    }
+    return model_mapping.get(model, model)
+
+def _build_chatglm_payload(text: str, model: str, stream: bool) -> Dict[str, Any]:
+    """Build ChatGLM API payload"""
+    resolved_model = _resolve_chatglm_model(model)
+    return {
+        "stream": True,  # Always use stream for consistent handling
+        "model": resolved_model,
+        "messages": [{"role": "user", "content": text}],
+        "params": {},
+        "features": {
+            "image_generation": False,
+            "web_search": False,
+            "auto_web_search": False,
+            "preview_mode": True,
+            "flags": [],
+            "features": [
+                {"type": "mcp", "server": "vibe-coding", "status": "hidden"},
+                {"type": "mcp", "server": "ppt-maker", "status": "hidden"},
+                {"type": "mcp", "server": "image-search", "status": "hidden"}
+            ],
+            "enable_thinking": True
+        },
+        "actions": [],
+        "tags": [],
+        "chat_id": "local",
+        "id": str(uuid.uuid4())
+    }
 
 
 @app.get("/")
@@ -1623,6 +1701,190 @@ async def chat_completions(request: Request):
             
         except Exception as e:
             return JSONResponse(status_code=502, content={"error": {"message": f"Refact API error: {str(e)}", "type": "bad_gateway"}})
+
+    if model in CHATGLM_MODELS:
+        # Use ChatGLM API (Z.AI) - Advanced Chinese/English models
+        session = _new_chatglm_session()
+        api_token = _get_chatglm_token(session)
+        payload = _build_chatglm_payload(user_text, model, stream)
+        
+        def chatglm_sse_generator() -> Generator[bytes, None, None]:
+            chat_id = _generate_id("chatcmpl")
+            created = _now_unix()
+            initial_chunk = {
+                "id": chat_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [
+                    {"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}
+                ],
+            }
+            yield f"data: {json.dumps(initial_chunk)}\n\n".encode("utf-8")
+
+            try:
+                response = session.post(
+                    CHATGLM_API_ENDPOINT,
+                    json=payload,
+                    stream=True,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                    impersonate="chrome120",
+                    headers={
+                        "Authorization": f"Bearer {api_token}",
+                        "x-fe-version": "prod-fe-1.0.70",
+                    }
+                )
+                response.raise_for_status()
+                
+                in_think = False
+                buffer = ""
+                for chunk in response.iter_content(chunk_size=None):
+                    if chunk:
+                        buffer += chunk.decode('utf-8', errors='ignore')
+                        # Process complete lines
+                        while '\n' in buffer:
+                            line, buffer = buffer.split('\n', 1)
+                            line = line.strip()
+                            if line and line.startswith("data:"):
+                                json_str = line[5:].strip()
+                                if not json_str:
+                                    continue
+                                try:
+                                    data = json.loads(json_str)
+                                    if data.get("type") == "chat:completion":
+                                        chunk_data = data.get("data", {})
+                                        phase = chunk_data.get("phase")
+                                        delta_content = chunk_data.get("delta_content")
+                                        
+                                        if delta_content:
+                                            # Handle thinking phase with special tags
+                                            if phase == "thinking":
+                                                if not in_think:
+                                                    content = "<think>\n\n" + delta_content
+                                                    in_think = True
+                                                else:
+                                                    content = delta_content
+                                            else:
+                                                if in_think:
+                                                    content = "\n</think>\n\n" + delta_content
+                                                    in_think = False
+                                                else:
+                                                    content = delta_content
+                                            
+                                            chunk_payload = {
+                                                "id": chat_id,
+                                                "object": "chat.completion.chunk",
+                                                "created": created,
+                                                "model": model,
+                                                "choices": [
+                                                    {"index": 0, "delta": {"content": content}, "finish_reason": None}
+                                                ],
+                                            }
+                                            yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
+                                except json.JSONDecodeError:
+                                    continue
+                        
+                # Close thinking tag if still open
+                if in_think:
+                    chunk_payload = {
+                        "id": chat_id,
+                        "object": "chat.completion.chunk",
+                        "created": created,
+                        "model": model,
+                        "choices": [
+                            {"index": 0, "delta": {"content": "\n</think>"}, "finish_reason": None}
+                        ],
+                    }
+                    yield f"data: {json.dumps(chunk_payload)}\n\n".encode("utf-8")
+                    
+            except Exception as e:
+                error_chunk = {
+                    "id": _generate_id("err"),
+                    "object": "error",
+                    "created": _now_unix(),
+                    "message": f"ChatGLM API error: {str(e)}",
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n".encode("utf-8")
+            finally:
+                yield b"data: [DONE]\n\n"
+
+        if stream:
+            return StreamingResponse(chatglm_sse_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
+
+        # Non-streaming request
+        full_text = ""
+        in_think = False
+        try:
+            if not api_token:
+                return JSONResponse(status_code=502, content={"error": {"message": "Failed to get ChatGLM API token", "type": "bad_gateway"}})
+            
+            response = session.post(
+                CHATGLM_API_ENDPOINT,
+                json=payload,
+                stream=True,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                impersonate="chrome120",
+                headers={
+                    "Authorization": f"Bearer {api_token}",
+                    "x-fe-version": "prod-fe-1.0.70",
+                }
+            )
+            response.raise_for_status()
+            
+            # Process streaming response using iter_content
+            buffer = ""
+            for chunk in response.iter_content(chunk_size=None):
+                if chunk:
+                    buffer += chunk.decode('utf-8', errors='ignore')
+                    # Process complete lines
+                    while '\n' in buffer:
+                        line, buffer = buffer.split('\n', 1)
+                        line = line.strip()
+                        if line and line.startswith("data:"):
+                            json_str = line[5:].strip()
+                            if not json_str:
+                                continue
+                            try:
+                                data = json.loads(json_str)
+                                if data.get("type") == "chat:completion":
+                                    chunk_data = data.get("data", {})
+                                    phase = chunk_data.get("phase")
+                                    delta_content = chunk_data.get("delta_content")
+                                    
+                                    if delta_content:
+                                        if phase == "thinking":
+                                            if not in_think:
+                                                full_text += "<think>\n\n" + delta_content
+                                                in_think = True
+                                            else:
+                                                full_text += delta_content
+                                        else:
+                                            if in_think:
+                                                full_text += "\n</think>\n\n" + delta_content
+                                                in_think = False
+                                            else:
+                                                full_text += delta_content
+                            except json.JSONDecodeError:
+                                continue
+            
+            # Close thinking tag if still open
+            if in_think:
+                full_text += "\n</think>"
+            
+            response_obj = {
+                "id": _generate_id("chatcmpl"),
+                "object": "chat.completion",
+                "created": _now_unix(),
+                "model": model,
+                "choices": [
+                    {"index": 0, "message": {"role": "assistant", "content": full_text}, "finish_reason": "stop"}
+                ],
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            }
+            return JSONResponse(content=response_obj)
+            
+        except Exception as e:
+            return JSONResponse(status_code=502, content={"error": {"message": f"ChatGLM API error: {str(e)}", "type": "bad_gateway"}})
 
     # Build message payload matching minimal-chatbot expectations
     if image_url:
