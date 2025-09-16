@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Enhanced Multi-Model CLI Chatbot
-Supports GPT-OSS, Grok3API, and Z.AI models
+Supports GPT-OSS, Grok3API, Z.AI, and Longcat models
 """
 
 import requests
@@ -9,6 +9,7 @@ import json
 import uuid
 import sys
 import time
+import random
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 
@@ -30,6 +31,11 @@ class MultiModelChatbot:
         self.gpt_oss_base_url = "https://api.gpt-oss.com"
         self.gpt_oss_session = requests.Session()
         self.thread_id: Optional[str] = None
+        
+        # Longcat configuration
+        self.longcat_api_url = "https://longcat.chat/api/v1/chat-completion-oversea"
+        self.longcat_session = requests.Session()
+        self.longcat_messages: List[Dict[str, Any]] = []
         
         # Initialize providers
         self._initialize_providers()
@@ -100,6 +106,22 @@ class MultiModelChatbot:
             )
             self.zai_client = None
             
+        # 4. Longcat
+        try:
+            self._setup_longcat_headers()
+            self.providers['longcat'] = ModelProvider(
+                name="Longcat",
+                models=["longcat-chat"],
+                available=True
+            )
+        except Exception as e:
+            self.providers['longcat'] = ModelProvider(
+                name="Longcat",
+                models=["longcat-chat"],
+                available=False,
+                error_message=str(e)
+            )
+            
         # Set default provider to the first available one
         for provider_key, provider in self.providers.items():
             if provider.available:
@@ -144,6 +166,40 @@ class MultiModelChatbot:
         self.current_model = model_name
         print(f"✓ Switched to {provider.name} - {model_name}")
         return True
+    
+    def _setup_longcat_headers(self):
+        """Setup headers for Longcat API"""
+        self.longcat_session.headers.update({
+            'Accept-Language': 'en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7,en-AU;q=0.6',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Origin': 'https://longcat.chat',
+            'Pragma': 'no-cache',
+            'Referer': 'https://longcat.chat/t',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin',
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36',
+            'accept': 'text/event-stream,application/json',
+            'content-type': 'application/json',
+            'm-appkey': 'fe_com.sankuai.friday.fe.longcat',
+            'm-traceid': str(random.randint(1000000000000000000, 9999999999999999999)),
+            'sec-ch-ua': '"Not;A=Brand";v="99", "Google Chrome";v="139", "Chromium";v="139"',
+            'sec-ch-ua-mobile': '?1',
+            'sec-ch-ua-platform': '"Android"',
+            'x-client-language': 'en',
+            'x-requested-with': 'XMLHttpRequest'
+        })
+        
+        # Set cookies
+        self.longcat_session.cookies.update({
+            '_lxsdk_cuid': '',
+            '_lxsdk_s': ''
+        })
+    
+    def generate_message_id(self) -> int:
+        """Generate a random message ID for Longcat"""
+        return random.randint(10000000, 99999999)
     
     def create_thread(self) -> str:
         """Create a new conversation thread (for GPT-OSS)"""
@@ -240,6 +296,98 @@ class MultiModelChatbot:
         except Exception as e:
             print(f"\n❌ Error with Z.AI API: {e}")
     
+    def send_message_longcat(self, message: str) -> None:
+        """Send message via Longcat API"""
+        try:
+            user_message_id = self.generate_message_id()
+            assistant_message_id = self.generate_message_id()
+            
+            # Add user message to conversation history
+            user_message = {
+                "role": "user",
+                "content": message,
+                "chatStatus": "FINISHED",
+                "messageId": user_message_id,
+                "idType": "custom"
+            }
+            
+            # Add assistant message placeholder
+            assistant_message = {
+                "role": "assistant",
+                "content": "",
+                "chatStatus": "LOADING",
+                "messageId": assistant_message_id,
+                "idType": "custom"
+            }
+            
+            # Prepare the current request messages
+            current_messages = self.longcat_messages + [user_message, assistant_message]
+            
+            payload = {
+                "content": message,
+                "messages": current_messages,
+                "reasonEnabled": 0,
+                "searchEnabled": 0,
+                "regenerate": 0
+            }
+            
+            print("\n🤖 Longcat:", end=" ", flush=True)
+            
+            response = self.longcat_session.post(
+                self.longcat_api_url,
+                data=json.dumps(payload),
+                timeout=30,
+                stream=True
+            )
+            
+            if response.status_code == 200:
+                # Handle streaming response
+                full_response = ""
+                for line in response.iter_lines():
+                    if line:
+                        line_text = line.decode('utf-8')
+                        if line_text.startswith('data:'):
+                            try:
+                                # Remove 'data:' prefix and parse JSON
+                                json_str = line_text[5:].strip()
+                                if json_str:
+                                    data = json.loads(json_str)
+                                    
+                                    # Extract delta content from the streaming response
+                                    if ('choices' in data and 
+                                        len(data['choices']) > 0 and 
+                                        'delta' in data['choices'][0] and 
+                                        'content' in data['choices'][0]['delta'] and
+                                        data['choices'][0]['delta']['content'] is not None):
+                                        
+                                        chunk = data['choices'][0]['delta']['content']
+                                        full_response += chunk
+                                        print(chunk, end='', flush=True)
+                                    
+                                    # Check if this is the last message
+                                    if data.get('lastOne', False):
+                                        break
+                                        
+                            except json.JSONDecodeError:
+                                continue
+                
+                # Update conversation history
+                user_message["chatStatus"] = "FINISHED"
+                assistant_message["content"] = full_response
+                assistant_message["chatStatus"] = "FINISHED"
+                
+                self.longcat_messages.extend([user_message, assistant_message])
+                
+                print()  # Add newline after streaming
+                
+            else:
+                print(f"Error: HTTP {response.status_code} - {response.text}")
+                
+        except requests.exceptions.RequestException as e:
+            print(f"\n❌ Error with Longcat API: {e}")
+        except Exception as e:
+            print(f"\n❌ Unexpected error with Longcat: {e}")
+    
     def _process_gpt_oss_stream(self, response: requests.Response) -> None:
         """Process GPT-OSS streaming response"""
         assistant_response = ""
@@ -308,6 +456,8 @@ class MultiModelChatbot:
             self.send_message_grok(message)
         elif self.current_provider == 'zai':
             self.send_message_zai(message)
+        elif self.current_provider == 'longcat':
+            self.send_message_longcat(message)
         else:
             print(f"❌ Unknown provider: {self.current_provider}")
     
@@ -353,6 +503,9 @@ class MultiModelChatbot:
                     if self.current_provider == 'gpt-oss':
                         self.create_thread()
                         print(f"\n📝 Started new conversation thread")
+                    elif self.current_provider == 'longcat':
+                        self.longcat_messages = []
+                        print(f"\n📝 Started new conversation (cleared Longcat history)")
                     else:
                         print(f"\n📝 New conversation (provider: {self.providers[self.current_provider].name})")
                     continue

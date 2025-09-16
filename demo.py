@@ -53,7 +53,8 @@ def demo():
         ("Grok3API (grok-3)", "Text generation, reasoning"),
         ("Grok3API (grok-3-image)", "Text + image generation"),
         ("Z.AI (glm-4.5v)", "Visual understanding, analysis"),
-        ("Z.AI (0727-360B-API)", "Advanced coding, tool use")
+        ("Z.AI (0727-360B-API)", "Advanced coding, tool use"),
+        ("Longcat (longcat-chat)", "General conversation, streaming responses")
     ]
     
     for model, capability in capabilities:
