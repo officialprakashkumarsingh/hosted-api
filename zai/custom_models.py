@@ -48,13 +48,22 @@ CONSERVATIVE = {
     "description": "Conservative, factual responses"
 }
 
+LONGCAT_CHATBOT = {
+    "model": "longcat-chat",
+    "temperature": 0.8,
+    "top_p": 0.9,
+    "max_tokens": 4000,
+    "description": "Longcat streaming chat model"
+}
+
 CUSTOM_PRESETS = {
     "creative": CREATIVE_WRITER,
     "code": CODE_ASSISTANT,
     "balanced": BALANCED_CHAT,
     "research": RESEARCH_ASSISTANT,
     "brainstorm": BRAINSTORMER,
-    "conservative": CONSERVATIVE
+    "conservative": CONSERVATIVE,
+    "longcat": LONGCAT_CHATBOT
 }
 
 
