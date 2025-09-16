@@ -1,157 +1,202 @@
-# Multi-Model Hosted API
+# Multi-Model AI Chatbot API 🤖
 
-A powerful command-line chatbot supporting multiple AI model providers including GPT-OSS, Grok3API, Z.AI, and Longcat models.
+A powerful Python application that provides access to multiple AI model providers including GPT-OSS, Grok3API, Z.AI, and Longcat through both CLI and REST API interfaces.
 
-## Features
+## 🚀 One-Click Deploy to Render
 
-- **Multiple AI Model Providers**: Support for GPT-OSS, Grok3API (Grok-3), Z.AI (GLM-4.5v, 0727-360B-API), and Longcat
-- **Dynamic Model Switching**: Switch between different models and providers on-the-fly
-- **Image Generation**: Support for image generation via Grok3API
-- **Streaming Responses**: Real-time streaming responses where supported
-- **Automatic Fallback**: Graceful handling when providers are unavailable
-- **Command Interface**: Rich command interface for provider management
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/officialprakashkumarsingh/hosted-api)
 
-## Supported Models
+Click the button above to deploy this application to Render with zero configuration!
+
+## ✨ Features
+
+- **Multiple AI Model Providers**: GPT-OSS, Grok3API, Z.AI, and Longcat
+- **REST API**: Full REST API for web integration
+- **CLI Interface**: Interactive command-line chatbot
+- **Streaming Responses**: Real-time streaming for better UX
+- **Auto-Deployment**: One-click deployment to Render
+- **Health Monitoring**: Built-in health check endpoints
+- **Conversation Management**: History tracking and clearing
+
+## 🔧 Supported Models
 
 ### GPT-OSS
-- **gpt-oss-120b**: Advanced reasoning model with streaming responses
+- **Model**: gpt-oss-120b
+- **Features**: Streaming, reasoning display
+- **Status**: ✅ Active
 
 ### Grok3API  
-- **grok-3**: Text generation with reasoning capabilities
-- **grok-3-image**: Text and image generation (requires Chrome browser)
+- **Models**: grok-3, grok-3-image
+- **Features**: Text & image generation
+- **Status**: ✅ Active
 
 ### Z.AI
-- **glm-4.5v**: Advanced visual understanding and analysis model  
-- **0727-360B-API**: Advanced coding and tool use model
+- **Models**: glm-4.5v, 0727-360B-API
+- **Features**: Thinking process, custom parameters
+- **Status**: ✅ Active
 
 ### Longcat
-- **longcat-chat**: General-purpose conversational AI with streaming responses
+- **Model**: longcat-chat
+- **Features**: Fast streaming responses
+- **Status**: ✅ Active
 
-## Installation
+## 🌐 API Endpoints
 
-1. Clone the repository:
+### Base URL
+```
+https://your-app-name.onrender.com
+```
+
+### Available Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | API documentation |
+| GET | `/health` | Health check |
+| GET | `/api/providers` | List available providers |
+| POST | `/api/chat/multi` | Chat with multi-model bot |
+| POST | `/api/chat/longcat` | Chat with Longcat |
+| GET | `/api/chat/longcat/history` | Get chat history |
+| POST | `/api/chat/longcat/clear` | Clear chat history |
+
+### Example API Usage
+
+#### Chat with Longcat
+```bash
+curl -X POST https://your-app.onrender.com/api/chat/longcat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello, how are you?"}'
+```
+
+#### List Providers
+```bash
+curl https://your-app.onrender.com/api/providers
+```
+
+#### Chat with Multi-Model (specify provider)
+```bash
+curl -X POST https://your-app.onrender.com/api/chat/multi \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Explain quantum computing",
+    "provider": "gpt-oss",
+    "model": "gpt-oss-120b"
+  }'
+```
+
+## 🖥️ Local Development
+
+### Installation
 ```bash
 git clone https://github.com/officialprakashkumarsingh/hosted-api.git
 cd hosted-api
-```
-
-2. Install dependencies:
-```bash
 pip install -r requirements.txt
 ```
 
-3. For Grok3API support, ensure Google Chrome is installed on your system.
-
-## Usage
-
-### Basic Usage
-
-Run the multi-model chatbot:
+### Run CLI Mode
 ```bash
-python3 multi_model_chatbot.py
+python multi_model_chatbot.py
 ```
 
-Run the original GPT-OSS chatbot:
+### Run API Server
 ```bash
-python3 "t (1).py"
+python app.py
 ```
 
-### Multi-Model Commands
+### CLI Commands
+- `quit`, `exit`, `q` - End conversation
+- `providers` - List all providers and models
+- `switch <provider> <model>` - Switch provider/model
+- `new`, `restart` - Start new conversation
 
-- **providers** - List all available providers and models
-- **switch <provider> <model>** - Switch to a specific provider and model
-  - Example: `switch grok grok-3`
-  - Example: `switch zai glm-4.5v`
-  - Example: `switch longcat longcat-chat`  
-- **new** - Start a new conversation thread
-- **quit/exit** - End the session
+## 🚀 Deployment
 
-### Example Session
+### Render (Recommended)
+1. Click the "Deploy to Render" button above
+2. Connect your GitHub account
+3. Your app will be deployed automatically!
 
-```
-👤 You: providers
-📋 Available Model Providers:
-GPT-OSS: ✓ Available  
-  → gpt-oss-120b
-Grok3API: ✓ Available
-    grok-3
-    grok-3-image
-Z.AI: ✓ Available
-    glm-4.5v
-    0727-360B-API
-Longcat: ✓ Available
-    longcat-chat
+### Manual Deployment
+1. Fork this repository
+2. Create a new Web Service on Render
+3. Connect your forked repository
+4. Use these settings:
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `gunicorn --bind 0.0.0.0:$PORT app:app`
+   - **Python Version**: 3.11.0
 
-👤 You: switch longcat longcat-chat
-✓ Switched to Longcat - longcat-chat
-
-👤 You: Hello, how are you?
-🤖 Longcat: Hello! I'm doing well, thank you for asking...
-```
-
-## API Integration
-
-The project includes modular support for:
-
-1. **GPT-OSS API** - Original implementation with streaming
-2. **Grok3API** - Third-party library with automatic cookie management  
-3. **Z.AI SDK** - Complete Python SDK with multiple models
-4. **Longcat API** - Direct API integration with streaming responses
-
-## Project Structure
+## 📁 Project Structure
 
 ```
-hosted-api/
-├── multi_model_chatbot.py   # Enhanced multi-provider chatbot
-├── t (1).py                 # Original GPT-OSS chatbot
-├── zai/                     # Z.AI Python SDK
-│   ├── client.py
-│   ├── models.py
-│   ├── core/
-│   ├── operations/
-│   └── utils/
-├── requirements.txt         # Dependencies
-├── test_integration.py      # Integration tests
-└── README.md               # This file
+├── app.py                 # Flask API server
+├── multi_model_chatbot.py # Main CLI chatbot
+├── longcat_chatbot.py     # Standalone Longcat bot
+├── requirements.txt       # Python dependencies
+├── render.yaml           # Render deployment config
+├── test_longcat.py       # Test suite
+└── zai/                  # Z.AI SDK modules
+    ├── client.py
+    ├── models.py
+    ├── custom_models.py
+    └── ...
 ```
 
-## Dependencies
+## 🔧 Environment Variables
 
-- **requests**: HTTP client for API communication
-- **grok3api**: Official Grok3 API client library
-- **selenium** (via grok3api): Browser automation for cookie management
-- **undetected-chromedriver** (via grok3api): Chrome automation
+The application works out of the box with no required environment variables. Optional configurations:
 
-## Error Handling
+- `PORT` - Server port (set automatically by Render)
+- `PYTHON_VERSION` - Python version (3.11.0 recommended)
 
-The chatbot gracefully handles:
-- Network connectivity issues  
-- Provider unavailability
-- Authentication failures
-- Browser dependencies (for Grok3API)
+## 🧪 Testing
 
-When a provider is unavailable, the system automatically falls back to available providers.
-
-## Testing
-
-Run integration tests:
+Run the test suite:
 ```bash
-python3 test_integration.py  
+python test_longcat.py
 ```
 
-## Notes
+## 📊 Health Monitoring
 
-- **Grok3API** requires Google Chrome browser for automatic cookie management
-- **Z.AI** requires network access to chat.z.ai for authentication
-- **GPT-OSS** works independently without additional dependencies
-- All providers support graceful degradation when unavailable
+Check application health:
+```bash
+curl https://your-app.onrender.com/health
+```
 
-## Contributing
+Response:
+```json
+{
+  "status": "healthy",
+  "service": "Multi-Model Chatbot API",
+  "timestamp": 1640995200.0
+}
+```
 
-Contributions are welcome! Please ensure your code follows the existing patterns and includes appropriate error handling.
+## 🤝 Contributing
 
-## License
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-This project integrates multiple third-party libraries. Please check individual library licenses:
-- Grok3API: Check [boykopovar/Grok3API](https://github.com/boykopovar/Grok3API) 
-- Z.AI SDK: Check [iotbackdoor/zai-python-sdk](https://github.com/iotbackdoor/zai-python-sdk)
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- 📧 **Issues**: [GitHub Issues](https://github.com/officialprakashkumarsingh/hosted-api/issues)
+- 📖 **Documentation**: This README
+- 🚀 **Deploy**: Use the one-click deploy button above
+
+## 🏗️ Built With
+
+- **Python 3.11** - Core language
+- **Flask** - Web framework
+- **Gunicorn** - WSGI server
+- **Render** - Deployment platform
+- **Multiple AI APIs** - GPT-OSS, Grok3API, Z.AI, Longcat
+
+---
+
+**Ready to deploy?** Click the deploy button at the top! 🚀
