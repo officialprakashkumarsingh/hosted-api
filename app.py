@@ -27,11 +27,19 @@ def initialize_chatbots():
     """Initialize chatbot instances"""
     global multi_chatbot, longcat_chatbot
     try:
-        multi_chatbot = MultiModelChatbot()
+        print("🔄 Initializing Longcat chatbot...")
         longcat_chatbot = LongcatChatbot()
-        print("✓ Chatbots initialized successfully")
+        print("✓ Longcat chatbot initialized successfully")
+        
+        print("🔄 Initializing Multi-model chatbot...")
+        multi_chatbot = MultiModelChatbot()
+        print("✓ Multi-model chatbot initialized successfully")
+        
+        print("✅ All chatbots initialized successfully")
     except Exception as e:
         print(f"❌ Error initializing chatbots: {e}")
+        import traceback
+        traceback.print_exc()
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -39,29 +47,54 @@ def health_check():
     return jsonify({
         "status": "healthy",
         "service": "Multi-Model Chatbot API",
-        "timestamp": time.time()
+        "timestamp": time.time(),
+        "chatbots": {
+            "longcat_initialized": longcat_chatbot is not None,
+            "multi_initialized": multi_chatbot is not None
+        }
+    })
+
+@app.route('/api/debug', methods=['GET'])
+def debug_info():
+    """Debug information endpoint"""
+    return jsonify({
+        "chatbots": {
+            "longcat_chatbot": longcat_chatbot is not None,
+            "multi_chatbot": multi_chatbot is not None
+        },
+        "python_path": sys.path[:3],  # First 3 entries
+        "working_directory": os.getcwd(),
+        "environment": {
+            "PORT": os.environ.get('PORT', 'not_set')
+        }
     })
 
 @app.route('/api/providers', methods=['GET'])
 def list_providers():
     """List available model providers"""
     if not multi_chatbot:
-        return jsonify({"error": "Multi chatbot not initialized"}), 500
+        # Try to initialize if not already done
+        initialize_chatbots()
+        if not multi_chatbot:
+            return jsonify({"error": "Multi chatbot not initialized", "status": "initialization_failed"}), 500
     
-    providers = {}
-    for key, provider in multi_chatbot.providers.items():
-        providers[key] = {
-            "name": provider.name,
-            "models": provider.models,
-            "available": provider.available,
-            "error_message": provider.error_message
-        }
-    
-    return jsonify({
-        "providers": providers,
-        "current_provider": multi_chatbot.current_provider,
-        "current_model": multi_chatbot.current_model
-    })
+    try:
+        providers = {}
+        for key, provider in multi_chatbot.providers.items():
+            providers[key] = {
+                "name": provider.name,
+                "models": provider.models,
+                "available": provider.available,
+                "error_message": provider.error_message
+            }
+        
+        return jsonify({
+            "providers": providers,
+            "current_provider": multi_chatbot.current_provider,
+            "current_model": multi_chatbot.current_model
+        })
+    except Exception as e:
+        return jsonify({"error": f"Error listing providers: {str(e)}"}), 500
 
 @app.route('/api/chat/multi', methods=['POST'])
 def chat_multi():
@@ -99,7 +132,10 @@ def chat_multi():
 def chat_longcat():
     """Send message to Longcat chatbot"""
     if not longcat_chatbot:
-        return jsonify({"error": "Longcat chatbot not initialized"}), 500
+        # Try to initialize if not already done
+        initialize_chatbots()
+        if not longcat_chatbot:
+            return jsonify({"error": "Longcat chatbot not initialized", "status": "initialization_failed"}), 500
     
     data = request.get_json()
     if not data or 'message' not in data:
@@ -117,7 +153,7 @@ def chat_longcat():
             "timestamp": time.time()
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Longcat error: {str(e)}"}), 500
 
 @app.route('/api/chat/longcat/history', methods=['GET'])
 def get_longcat_history():
@@ -157,11 +193,12 @@ def home():
     })
 
 if __name__ == '__main__':
-    # Initialize chatbots in a separate thread to avoid blocking
-    init_thread = Thread(target=initialize_chatbots)
-    init_thread.start()
+    # Initialize chatbots at startup (but don't block if it fails)
+    print("🚀 Starting Multi-Model Chatbot API...")
+    initialize_chatbots()
     
     # Get port from environment variable (Render sets this)
     port = int(os.environ.get('PORT', 5000))
     
+    print(f"🌐 Server starting on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
