@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Enhanced Multi-Model CLI Chatbot
-Supports GPT-OSS, Grok3API, and Z.AI models
+Supports GPT-OSS, Grok3API, Z.AI, and Longcat models
 """
 
 import requests
@@ -99,6 +99,24 @@ class MultiModelChatbot:
                 error_message=str(e)
             )
             self.zai_client = None
+        
+        # 4. Longcat
+        try:
+            from longcat_client import LongcatClient
+            self.longcat_client = LongcatClient()
+            self.providers['longcat'] = ModelProvider(
+                name="Longcat",
+                models=["longcat-chat"],
+                available=True
+            )
+        except Exception as e:
+            self.providers['longcat'] = ModelProvider(
+                name="Longcat",
+                models=["longcat-chat"],
+                available=False,
+                error_message=str(e)
+            )
+            self.longcat_client = None
             
         # Set default provider to the first available one
         for provider_key, provider in self.providers.items():
@@ -240,6 +258,20 @@ class MultiModelChatbot:
         except Exception as e:
             print(f"\n❌ Error with Z.AI API: {e}")
     
+    def send_message_longcat(self, message: str) -> None:
+        """Send message via Longcat API (streaming)."""
+        if not getattr(self, 'longcat_client', None):
+            print("❌ Longcat client not available")
+            return
+        try:
+            print("\n🐱 Longcat:", end=" ", flush=True)
+            for chunk in self.longcat_client.stream(message):
+                if chunk:
+                    print(chunk, end='', flush=True)
+            print("")
+        except Exception as e:
+            print(f"\n❌ Error with Longcat API: {e}")
+    
     def _process_gpt_oss_stream(self, response: requests.Response) -> None:
         """Process GPT-OSS streaming response"""
         assistant_response = ""
@@ -308,6 +340,8 @@ class MultiModelChatbot:
             self.send_message_grok(message)
         elif self.current_provider == 'zai':
             self.send_message_zai(message)
+        elif self.current_provider == 'longcat':
+            self.send_message_longcat(message)
         else:
             print(f"❌ Unknown provider: {self.current_provider}")
     

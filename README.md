@@ -1,6 +1,6 @@
 # Multi-Model Hosted API
 
-A powerful command-line chatbot supporting multiple AI model providers including GPT-OSS, Grok3API, and Z.AI models.
+A powerful command-line chatbot supporting multiple AI model providers including GPT-OSS, Grok3API, Z.AI, and Longcat models.
 
 ## Features
 
@@ -23,6 +23,9 @@ A powerful command-line chatbot supporting multiple AI model providers including
 ### Z.AI
 - **glm-4.5v**: Advanced visual understanding and analysis model  
 - **0727-360B-API**: Advanced coding and tool use model
+
+### Longcat
+- **longcat-chat**: Public chat endpoint with SSE streaming
 
 ## Installation
 
@@ -59,6 +62,7 @@ python3 "t (1).py"
 - **switch <provider> <model>** - Switch to a specific provider and model
   - Example: `switch grok grok-3`
   - Example: `switch zai glm-4.5v`  
+  - Example: `switch longcat longcat-chat`
 - **new** - Start a new conversation thread
 - **quit/exit** - End the session
 
@@ -75,6 +79,8 @@ Grok3API: ✓ Available
 Z.AI: ✓ Available
     glm-4.5v
     0727-360B-API
+Longcat: ✓ Available
+    longcat-chat
 
 👤 You: switch grok grok-3
 ✓ Switched to Grok3API - grok-3
@@ -130,6 +136,11 @@ When a provider is unavailable, the system automatically falls back to available
 Run integration tests:
 ```bash
 python3 test_integration.py  
+```
+
+Run Longcat streaming sanity test:
+```bash
+python3 test_longcat_stream.py
 ```
 
 ## Notes
