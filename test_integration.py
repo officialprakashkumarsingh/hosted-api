@@ -41,6 +41,7 @@ def test_integration():
         print("  - GPT-OSS: gpt-oss-120b")
         print("  - Grok3API: grok-3, grok-3-image")  
         print("  - Z.AI: glm-4.5v, 0727-360B-API")
+        print("  - Longcat: longcat-chat")
         
         return True
         

@@ -1,10 +1,10 @@
 # Multi-Model Hosted API
 
-A powerful command-line chatbot supporting multiple AI model providers including GPT-OSS, Grok3API, and Z.AI models.
+A powerful command-line chatbot supporting multiple AI model providers including GPT-OSS, Grok3API, Z.AI, and Longcat models.
 
 ## Features
 
-- **Multiple AI Model Providers**: Support for GPT-OSS, Grok3API (Grok-3), and Z.AI (GLM-4.5v, 0727-360B-API)
+- **Multiple AI Model Providers**: Support for GPT-OSS, Grok3API (Grok-3), Z.AI (GLM-4.5v, 0727-360B-API), and Longcat
 - **Dynamic Model Switching**: Switch between different models and providers on-the-fly
 - **Image Generation**: Support for image generation via Grok3API
 - **Streaming Responses**: Real-time streaming responses where supported
@@ -23,6 +23,9 @@ A powerful command-line chatbot supporting multiple AI model providers including
 ### Z.AI
 - **glm-4.5v**: Advanced visual understanding and analysis model  
 - **0727-360B-API**: Advanced coding and tool use model
+
+### Longcat
+- **longcat-chat**: General-purpose conversational AI with streaming responses
 
 ## Installation
 
@@ -58,7 +61,8 @@ python3 "t (1).py"
 - **providers** - List all available providers and models
 - **switch <provider> <model>** - Switch to a specific provider and model
   - Example: `switch grok grok-3`
-  - Example: `switch zai glm-4.5v`  
+  - Example: `switch zai glm-4.5v`
+  - Example: `switch longcat longcat-chat`  
 - **new** - Start a new conversation thread
 - **quit/exit** - End the session
 
@@ -75,12 +79,14 @@ Grok3API: ✓ Available
 Z.AI: ✓ Available
     glm-4.5v
     0727-360B-API
+Longcat: ✓ Available
+    longcat-chat
 
-👤 You: switch grok grok-3
-✓ Switched to Grok3API - grok-3
+👤 You: switch longcat longcat-chat
+✓ Switched to Longcat - longcat-chat
 
 👤 You: Hello, how are you?
-🤖 Grok: Hello! I'm doing well, thank you for asking...
+🤖 Longcat: Hello! I'm doing well, thank you for asking...
 ```
 
 ## API Integration
@@ -90,6 +96,7 @@ The project includes modular support for:
 1. **GPT-OSS API** - Original implementation with streaming
 2. **Grok3API** - Third-party library with automatic cookie management  
 3. **Z.AI SDK** - Complete Python SDK with multiple models
+4. **Longcat API** - Direct API integration with streaming responses
 
 ## Project Structure
 

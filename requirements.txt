@@ -1,2 +1,2 @@
 requests>=2.31.0
-grok3api>=0.1.0
+grok3api>=0.1.0rc2
